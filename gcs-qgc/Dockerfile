@@ -10,7 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl wget grep \
-        squashfs-tools \
+        squashfs-tools binutils \
         xvfb x11vnc fluxbox novnc websockify supervisor \
         libgl1-mesa-glx libxkbcommon0 libxkbcommon-x11-0 libpulse0 libnss3 \
         libxcomposite1 libxdamage1 libxrandr2 libxi6 libxcursor1 libxtst6 \
@@ -23,11 +23,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # Download QGC AppImage. Do NOT execute it (AppImage bootstrap fails under cross-arch emulation).
-# Extract the embedded squashfs blob directly: find 'hsqs' magic offset, then unsquashfs.
+# Compute end-of-ELF offset via readelf (e_shoff + e_shnum * e_shentsize) — that's where the
+# embedded squashfs blob starts in AppImage type 2.
 RUN wget -O /opt/QGroundControl.AppImage \
         "https://github.com/mavlink/qgroundcontrol/releases/download/${QGC_VERSION}/QGroundControl.AppImage" && \
-    OFFSET=$(grep -aoP '\x68\x73\x71\x73' -b /opt/QGroundControl.AppImage | head -1 | cut -d: -f1) && \
-    echo "[gcs-qgc] squashfs offset detected: $OFFSET" && \
+    SHOFF=$(readelf -h /opt/QGroundControl.AppImage | awk '/Start of section headers/ {print $5}') && \
+    SHNUM=$(readelf -h /opt/QGroundControl.AppImage | awk '/Number of section headers/ {print $5}') && \
+    SHSIZE=$(readelf -h /opt/QGroundControl.AppImage | awk '/Size of section headers/ {print $5}') && \
+    OFFSET=$((SHOFF + SHNUM * SHSIZE)) && \
+    echo "[gcs-qgc] squashfs offset: $OFFSET (shoff=$SHOFF shnum=$SHNUM shsize=$SHSIZE)" && \
     unsquashfs -d /opt/qgc -o "$OFFSET" /opt/QGroundControl.AppImage > /dev/null && \
     rm /opt/QGroundControl.AppImage
 
