@@ -9,7 +9,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     QGC_VERSION=v4.4.4
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl wget \
+        ca-certificates curl wget grep \
+        squashfs-tools \
         xvfb x11vnc fluxbox novnc websockify supervisor \
         libgl1-mesa-glx libxkbcommon0 libxkbcommon-x11-0 libpulse0 libnss3 \
         libxcomposite1 libxdamage1 libxrandr2 libxi6 libxcursor1 libxtst6 \
@@ -21,12 +22,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Download QGroundControl AppImage (Linux x86_64)
+# Download QGC AppImage. Do NOT execute it (AppImage bootstrap fails under cross-arch emulation).
+# Extract the embedded squashfs blob directly: find 'hsqs' magic offset, then unsquashfs.
 RUN wget -O /opt/QGroundControl.AppImage \
         "https://github.com/mavlink/qgroundcontrol/releases/download/${QGC_VERSION}/QGroundControl.AppImage" && \
-    chmod +x /opt/QGroundControl.AppImage && \
-    cd /opt && ./QGroundControl.AppImage --appimage-extract > /dev/null && \
-    mv squashfs-root /opt/qgc && \
+    OFFSET=$(grep -aoP '\x68\x73\x71\x73' -b /opt/QGroundControl.AppImage | head -1 | cut -d: -f1) && \
+    echo "[gcs-qgc] squashfs offset detected: $OFFSET" && \
+    unsquashfs -d /opt/qgc -o "$OFFSET" /opt/QGroundControl.AppImage > /dev/null && \
     rm /opt/QGroundControl.AppImage
 
 COPY missions/ /root/missions/
