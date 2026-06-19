@@ -41,7 +41,10 @@ RUN wget -O /opt/QGroundControl.AppImage \
     unsquashfs -d /opt/qgc -o "$OFFSET" /opt/QGroundControl.AppImage > /dev/null && \
     rm /opt/QGroundControl.AppImage
 
-COPY missions/ /root/missions/
+RUN useradd -m -s /bin/bash -u 1000 qgc
+
+COPY missions/ /home/qgc/missions/
+RUN chown -R qgc:qgc /home/qgc/missions
 COPY supervisord.conf /etc/supervisor/conf.d/qgc.conf
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
