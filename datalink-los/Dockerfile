@@ -6,7 +6,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl git build-essential \
-        meson ninja-build pkg-config \
+        meson ninja-build pkg-config cmake \
+        libsystemd-dev \
         python3 python3-pip \
         iproute2 iputils-ping net-tools tcpdump \
         tzdata && \
