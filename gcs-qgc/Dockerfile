@@ -16,6 +16,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxcomposite1 libxdamage1 libxrandr2 libxi6 libxcursor1 libxtst6 \
         libfontconfig1 libdbus-1-3 libsm6 libxext6 libxrender1 \
         libasound2 libssl3 \
+        libsdl2-2.0-0 \
+        libgstreamer1.0-0 libgstreamer-plugins-base1.0-0 libgstreamer-gl1.0-0 \
+        gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-libav \
+        libpulse-mainloop-glib0 \
         fonts-noto-cjk \
         tzdata && \
     rm -rf /var/lib/apt/lists/*
