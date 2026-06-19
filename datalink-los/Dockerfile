@@ -15,10 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# Build mavlink-router from source (official)
+# Build mavlink-router from source (official) — disable systemd unit dir (container has no systemd)
 RUN git clone --recursive --depth 1 https://github.com/mavlink-router/mavlink-router.git /tmp/mavlink-router && \
     cd /tmp/mavlink-router && \
-    meson setup build . && \
+    meson setup build . -Dsystemdsystemunitdir=no && \
     ninja -C build && \
     ninja -C build install && \
     ldconfig && \
