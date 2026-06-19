@@ -1,0 +1,76 @@
+name: uav-sim-env
+
+services:
+  av-mpd:
+    build:
+      context: ./av-mpd
+    container_name: uav-av-mpd
+    hostname: av-mpd
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.10
+    environment:
+      VEHICLE: ArduPlane
+      FRAME: quadplane
+      INSTANCE: "0"
+      MAVLINK_OUT_HOST: datalink-los
+      MAVLINK_OUT_PORT: "14550"
+      HOME_LAT: "37.5326"
+      HOME_LON: "127.0246"
+      HOME_ALT: "50"
+      HOME_HEADING: "0"
+    ports:
+      - "5760:5760"
+    depends_on:
+      - datalink-los
+    restart: unless-stopped
+
+  datalink-los:
+    build:
+      context: ./datalink-los
+    container_name: uav-datalink-los
+    hostname: datalink-los
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.20
+    cap_add:
+      - NET_ADMIN
+    environment:
+      LINK_DELAY_MS: "50"
+      LINK_LOSS_PCT: "1"
+      LINK_JITTER_MS: "5"
+      ENDPOINT_AV: "av-mpd:14550"
+      ENDPOINT_GCS: "gcs-qgc:14551"
+      ENDPOINT_TAP: "10.50.0.255:14552"
+    ports:
+      - "14550:14550/udp"
+      - "14551:14551/udp"
+      - "14552:14552/udp"
+    restart: unless-stopped
+
+  gcs-qgc:
+    build:
+      context: ./gcs-qgc
+    container_name: uav-gcs-qgc
+    hostname: gcs-qgc
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.30
+    environment:
+      MAVLINK_IN_PORT: "14551"
+      VNC_PASSWORD: "uavsim"
+      DISPLAY: ":0"
+    ports:
+      - "8080:8080"
+      - "5900:5900"
+    depends_on:
+      - datalink-los
+    shm_size: "512m"
+    restart: unless-stopped
+
+networks:
+  uas-los:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.50.0.0/24

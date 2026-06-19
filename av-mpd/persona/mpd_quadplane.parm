@@ -1,0 +1,48 @@
+# MPD persona — LIG Nex1 소형 정찰·타격 복합형 드론
+# Reference: LIG 무인기 카탈로그 (방위사업청 신속시범획득사업, Army Tiger 4.0)
+# Frame: Quadplane (tilt-rotor 4발 VTOL, fixed-wing cruise)
+# Class: Group 1 (소형, 분대급 휴대, ~5kg MTOW)
+#
+# Parameter overrides applied on top of ArduPilot SITL default Quadplane params.
+
+# --- Airframe / MTOW ---
+# 분해 후 백팩 휴대 가능 → 경량 프레임 가정
+Q_M_THST_HOVER     0.30
+Q_WVANE_ENABLE     1
+
+# --- Battery / endurance ---
+# 비행시간 ~60분 가정 (Group 1 끝단)
+BATT_CAPACITY      12000
+BATT_LOW_VOLT      14.0
+BATT_CRT_VOLT      13.5
+
+# --- GPS / GNSS ---
+# Single GPS (군용 SAASM/M-code 미반영, 시뮬용)
+GPS_TYPE           1
+GPS_AUTO_SWITCH    1
+
+# --- Telemetry / MAVLink rates ---
+# GCS 1Hz position, 5Hz attitude (저대역 LOS 가정)
+SR0_POSITION       2
+SR0_EXT_STAT       1
+SR0_EXTRA1         5
+SR0_EXTRA2         2
+SR0_EXTRA3         1
+
+# --- Failsafe ---
+# Datalink loss → return to launch
+FS_SHORT_ACTN      1
+FS_LONG_ACTN       1
+FS_GCS_ENABL       1
+
+# --- Mission / waypoint ---
+WP_RADIUS          15
+
+# --- EO/IR gimbal (mount stub) ---
+MNT1_TYPE          1
+MNT1_DEFLT_MODE    3
+
+# --- Self-destruct payload (자폭탄 ~870g) — modelled as servo channel ---
+# Channel 9 = arm switch, Channel 10 = release (S4 시나리오 진입점)
+SERVO9_FUNCTION    0
+SERVO10_FUNCTION   0

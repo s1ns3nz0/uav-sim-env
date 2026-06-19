@@ -1,0 +1,18 @@
+.DS_Store
+*.log
+*.pid
+*.swp
+.venv/
+__pycache__/
+*.pyc
+
+# SITL/Gazebo runtime
+logs/
+Tools/
+build/
+eeprom.bin
+mav.parm
+
+# Local overrides
+docker-compose.override.yml
+.env
