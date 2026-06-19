@@ -51,6 +51,7 @@ services:
   gcs-qgc:
     build:
       context: ./gcs-qgc
+    platform: linux/amd64
     container_name: uav-gcs-qgc
     hostname: gcs-qgc
     networks:
