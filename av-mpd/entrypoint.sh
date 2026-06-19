@@ -18,12 +18,12 @@ mkdir -p "$LOG_DIR"
 
 cd /home/sitl/ardupilot
 
-# sim_vehicle.py with persona param + MAVLink out to datalink-los
+# Launch SITL. MAVProxy is disabled — ArduPilot's TCP server (port 5760) is the
+# primary MAVLink endpoint. The datalink-los container connects as a TCP client.
 exec Tools/autotest/sim_vehicle.py \
     -v "$VEHICLE" \
     -f "$FRAME" \
     -I "$INSTANCE" \
     --no-mavproxy \
     --custom-location "${HOME_LAT},${HOME_LON},${HOME_ALT},${HOME_HEADING}" \
-    --add-param-file "$PERSONA_PARAM" \
-    --out "udpout:${MAVLINK_OUT_HOST}:${MAVLINK_OUT_PORT}"
+    --add-param-file "$PERSONA_PARAM"
