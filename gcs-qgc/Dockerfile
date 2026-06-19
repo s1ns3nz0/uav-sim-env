@@ -1,5 +1,7 @@
 # gcs-qgc — QGroundControl in headless Xvfb + noVNC (browser-accessible GCS)
-FROM ubuntu:22.04
+# Pinned to linux/amd64 — QGroundControl AppImage v4.4.4 is x86_64-only.
+# On ARM hosts (Mac M-series), this builds via Rosetta or QEMU emulation.
+FROM --platform=linux/amd64 ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Seoul \
