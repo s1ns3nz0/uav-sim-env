@@ -40,11 +40,10 @@ services:
       LINK_LOSS_PCT: "1"
       LINK_JITTER_MS: "5"
       ENDPOINT_AV: "av-mpd:14550"
-      ENDPOINT_GCS: "gcs-qgc:14551"
+      ENDPOINT_GCS: "gcs-qgc:14550"
       ENDPOINT_TAP: "10.50.0.255:14552"
     ports:
       - "14550:14550/udp"
-      - "14551:14551/udp"
       - "14552:14552/udp"
     restart: unless-stopped
 
@@ -58,7 +57,7 @@ services:
       uas-los:
         ipv4_address: 10.50.0.30
     environment:
-      MAVLINK_IN_PORT: "14551"
+      MAVLINK_IN_PORT: "14550"
       VNC_PASSWORD: "uavsim"
       DISPLAY: ":0"
     ports:
