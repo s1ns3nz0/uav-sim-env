@@ -33,6 +33,7 @@ write_files:
       #!/usr/bin/env bash
       set -euo pipefail
       source /opt/uav-sim-env-config.env
+      git config --global --add safe.directory /opt/uav-sim-env
       cd /opt/uav-sim-env
       git fetch --all --quiet
       git checkout "$GIT_BRANCH" --quiet
