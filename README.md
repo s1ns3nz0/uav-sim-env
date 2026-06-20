@@ -182,8 +182,10 @@ uav-sim-env/
 
 | Phase | 범위 | 상태 |
 |---|---|---|
-| 0 | 단일 MPD MVP (av-mpd + datalink-los + gcs-qgc) | **진행 중** |
-| 1 | telemetry-tap (Azure Sentinel ingest) + pgse-stub (S4) + GNSS spoof 모듈 (S1) | 다음 |
+| 0 | 단일 MPD MVP (av-mpd + datalink-los + gcs-qgc) | ✅ 완료 |
+| 1a | telemetry-tap (MAVLink → NDJSON, Sentinel ingest 준비) | ✅ 완료 |
+| 1b | GNSS 스푸핑 모듈 (S1 시나리오) | — |
+| 1c | pgse-stub (S4 시나리오) | — |
 | 2 | KCD-200 추가 + SATCOM stub (S3) + BVLOS 모드 | — |
 | 3 | MPUH MUM-T + 군집자폭 inter-drone mesh + AKS 이전 | — |
 

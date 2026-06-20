@@ -47,6 +47,22 @@ services:
       - "14552:14552/udp"
     restart: unless-stopped
 
+  telemetry-tap:
+    build:
+      context: ./telemetry-tap
+    container_name: uav-telemetry-tap
+    hostname: telemetry-tap
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.40
+    environment:
+      UAV_ID: "MPD-001"
+      LISTEN_HOST: "0.0.0.0"
+      LISTEN_PORT: "14552"
+    depends_on:
+      - datalink-los
+    restart: unless-stopped
+
   gcs-qgc:
     build:
       context: ./gcs-qgc
