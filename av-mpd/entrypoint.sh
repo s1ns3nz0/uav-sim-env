@@ -20,10 +20,16 @@ cd /home/sitl/ardupilot
 
 # Launch SITL. MAVProxy is disabled — ArduPilot's TCP server (port 5760) is the
 # primary MAVLink endpoint. The datalink-los container connects as a TCP client.
+#
+# --wipe-eeprom forces SITL to discard any cached eeprom.bin parameters on
+# startup, so the MPD persona param file is the single source of truth every
+# time the container restarts. Without this, ARMING_CHECK and similar params
+# silently revert to whatever the previous session wrote.
 exec Tools/autotest/sim_vehicle.py \
     -v "$VEHICLE" \
     -f "$FRAME" \
     -I "$INSTANCE" \
     --no-mavproxy \
+    --wipe-eeprom \
     --custom-location "${HOME_LAT},${HOME_LON},${HOME_ALT},${HOME_HEADING}" \
     --add-param-file "$PERSONA_PARAM"
