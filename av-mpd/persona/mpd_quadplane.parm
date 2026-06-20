@@ -35,6 +35,10 @@ FS_SHORT_ACTN      1
 FS_LONG_ACTN       1
 FS_GCS_ENABL       1
 
+# --- SITL convenience: disable all arming checks ---
+# Real deployment would keep this on. SITL has no RC, no compass cal, etc.
+ARMING_CHECK       0
+
 # --- Mission / waypoint ---
 WP_RADIUS          15
 
