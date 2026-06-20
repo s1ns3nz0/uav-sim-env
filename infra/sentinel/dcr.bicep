@@ -20,13 +20,18 @@ param workspaceName string
 @description('Name prefix for the DCE / DCR resources.')
 param namePrefix string = 'dah-data'
 
-@description('Custom log file path on the VM that AMA will tail.')
-param logFilePath string = '/var/log/uav-sim-env/telemetry.ndjson'
+@description('Telemetry NDJSON file path on the VM (telemetry-tap output).')
+param telemetryLogPath string = '/var/log/uav-sim-env/telemetry.ndjson'
+
+@description('PGSE decision NDJSON file path on the VM (pgse-stub output).')
+param pgseLogPath string = '/var/log/uav-sim-env/pgse.ndjson'
 
 var dceName = '${namePrefix}-dce'
 var dcrName = '${namePrefix}-uav-dcr'
 var streamName = 'Custom-UAVTelemetry'
+var pgseStreamName = 'Custom-UAVPgse'
 var tableName = 'UAVTelemetry_CL'
+var pgseTableName = 'UAVPgse_CL'
 
 resource law 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -120,6 +125,25 @@ var streamColumns = [
   { name: 'Text', type: 'string' }
 ]
 
+// Stream declaration for PGSE decision events (low volume, audit-flavoured).
+var pgseStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'EventType', type: 'string' }
+  { name: 'UAVId', type: 'string' }
+  { name: 'Operator', type: 'string' }
+  { name: 'Serial', type: 'string' }
+  { name: 'ImageHashSubmitted', type: 'string' }
+  { name: 'ImageHashExpected', type: 'string' }
+  { name: 'HashMatch', type: 'boolean' }
+  { name: 'SbomForbidden', type: 'string' }
+  { name: 'SbomForbiddenCount', type: 'int' }
+  { name: 'Passed', type: 'boolean' }
+  { name: 'Found', type: 'boolean' }
+  { name: 'StatusCode', type: 'int' }
+  { name: 'FailReason', type: 'string' }
+  { name: 'TokenExpiresAt', type: 'datetime' }
+]
+
 resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
   name: dcrName
   location: location
@@ -130,13 +154,22 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       '${streamName}': {
         columns: streamColumns
       }
+      '${pgseStreamName}': {
+        columns: pgseStreamColumns
+      }
     }
     dataSources: {
       logFiles: [
         {
           name: 'uavTelemetryFile'
           streams: [ streamName ]
-          filePatterns: [ logFilePath ]
+          filePatterns: [ telemetryLogPath ]
+          format: 'json'
+        }
+        {
+          name: 'uavPgseFile'
+          streams: [ pgseStreamName ]
+          filePatterns: [ pgseLogPath ]
           format: 'json'
         }
       ]
@@ -153,10 +186,14 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       {
         streams: [ streamName ]
         destinations: [ 'centralLaw' ]
-        // Passthrough — incoming JSON columns already match the table schema.
-        // Future transforms (e.g., enriching with geo lookups) go here.
         transformKql: 'source'
         outputStream: 'Custom-${tableName}'
+      }
+      {
+        streams: [ pgseStreamName ]
+        destinations: [ 'centralLaw' ]
+        transformKql: 'source'
+        outputStream: 'Custom-${pgseTableName}'
       }
     ]
   }
@@ -168,4 +205,5 @@ output dceIngestEndpoint string = dce.properties.logsIngestion.endpoint
 output dcrName string = dcr.name
 output dcrId string = dcr.id
 output dcrImmutableId string = dcr.properties.immutableId
-output streamName string = streamName
+output telemetryStreamName string = streamName
+output pgseStreamName string = pgseStreamName

@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 APPROVED_DB: Path = Path(os.environ.get("APPROVED_DB", "/data/approved_firmware.json"))
 TOKEN_TTL_SEC: int = int(os.environ.get("TOKEN_TTL_SEC", "300"))
 FORBIDDEN_SBOM_PREFIXES: tuple[str, ...] = ("unsigned/", "untrusted/")
+LOG_FILE_PATH: str = os.environ.get("LOG_FILE_PATH", "")
 
 app = FastAPI(
     title="pgse-stub",
@@ -39,6 +40,33 @@ app = FastAPI(
 
 _launch_tokens: dict[str, dict[str, Any]] = {}
 _last_preflight: dict[str, dict[str, Any]] = {}
+_log_file_handle = None
+
+
+def _now_iso() -> str:
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+
+
+def _emit_event(event: dict[str, Any]) -> None:
+    """Append one NDJSON decision record to the audit sink (Sentinel ingest)."""
+    if _log_file_handle is None:
+        return
+    enriched = {"TimeGenerated": _now_iso(), **event}
+    _log_file_handle.write(json.dumps(enriched, separators=(",", ":"), default=str) + "\n")
+    _log_file_handle.flush()
+
+
+@app.on_event("startup")
+def _open_log_sink() -> None:
+    global _log_file_handle
+    if not LOG_FILE_PATH:
+        return
+    os.makedirs(os.path.dirname(LOG_FILE_PATH) or ".", exist_ok=True)
+    _log_file_handle = open(LOG_FILE_PATH, "a", encoding="utf-8")
 
 
 def _load_approved() -> dict[str, str]:
@@ -99,6 +127,13 @@ def get_approved_firmware(uav_id: str) -> dict[str, str]:
     """
     approved = _load_approved()
     expected = approved.get(uav_id)
+    _emit_event({
+        "EventType": "firmware_query",
+        "UAVId": uav_id,
+        "Found": expected is not None,
+        "ImageHashExpected": expected or "",
+        "StatusCode": 200 if expected else 404,
+    })
     if expected is None:
         raise HTTPException(404, f"No approved firmware registered for {uav_id}")
     return {"uav_id": uav_id, "expected_hash": expected}
@@ -132,6 +167,19 @@ def preflight_check(req: PreflightRequest) -> PreflightResult:
         passed=image_match and not forbidden,
     )
     _last_preflight[req.uav_id] = result.model_dump()
+    _emit_event({
+        "EventType": "preflight_check",
+        "UAVId": req.uav_id,
+        "Operator": req.operator,
+        "Serial": req.serial,
+        "ImageHashSubmitted": req.image_hash,
+        "ImageHashExpected": expected,
+        "HashMatch": image_match,
+        "SbomForbidden": ",".join(forbidden),
+        "SbomForbiddenCount": len(forbidden),
+        "Passed": result.passed,
+        "StatusCode": 200,
+    })
     return result
 
 
@@ -140,8 +188,24 @@ def launch_authorize(req: LaunchAuthorizeRequest) -> LaunchToken:
     """Issue a short-lived launch token if the latest preflight passed."""
     last = _last_preflight.get(req.uav_id)
     if last is None:
+        _emit_event({
+            "EventType": "launch_authorize",
+            "UAVId": req.uav_id,
+            "Operator": req.operator,
+            "Passed": False,
+            "FailReason": "no_preflight_on_record",
+            "StatusCode": 409,
+        })
         raise HTTPException(409, f"No preflight on record for {req.uav_id}")
     if not last["passed"]:
+        _emit_event({
+            "EventType": "launch_authorize",
+            "UAVId": req.uav_id,
+            "Operator": req.operator,
+            "Passed": False,
+            "FailReason": "preflight_failed",
+            "StatusCode": 403,
+        })
         raise HTTPException(403, f"Preflight failed for {req.uav_id} — cannot authorise launch")
 
     token = secrets.token_urlsafe(24)
@@ -153,6 +217,14 @@ def launch_authorize(req: LaunchAuthorizeRequest) -> LaunchToken:
         "issued_at": issued_at,
         "expires_at": expires_at,
     }
+    _emit_event({
+        "EventType": "launch_authorize",
+        "UAVId": req.uav_id,
+        "Operator": req.operator,
+        "Passed": True,
+        "TokenExpiresAt": datetime.fromtimestamp(expires_at, tz=timezone.utc).isoformat(timespec="milliseconds"),
+        "StatusCode": 200,
+    })
     return LaunchToken(
         token=token,
         uav_id=req.uav_id,

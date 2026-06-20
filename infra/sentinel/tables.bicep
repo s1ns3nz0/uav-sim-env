@@ -139,5 +139,41 @@ resource uavTelemetry 'Microsoft.OperationalInsights/workspaces/tables@2023-09-0
   }
 }
 
+// Custom Log Table for PGSE decision events (firmware/preflight/launch).
+// Volume is low (one row per REST call), so use a longer retention than the
+// telemetry stream — these events feed S4 supply-chain rules and may be needed
+// for after-action audits.
+resource uavPgse 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVPgse_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 365
+    schema: {
+      name: 'UAVPgse_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'Operator', type: 'string' }
+        { name: 'Serial', type: 'string' }
+        { name: 'ImageHashSubmitted', type: 'string' }
+        { name: 'ImageHashExpected', type: 'string' }
+        { name: 'HashMatch', type: 'boolean' }
+        { name: 'SbomForbidden', type: 'string' }
+        { name: 'SbomForbiddenCount', type: 'int' }
+        { name: 'Passed', type: 'boolean' }
+        { name: 'Found', type: 'boolean' }
+        { name: 'StatusCode', type: 'int' }
+        { name: 'FailReason', type: 'string' }
+        { name: 'TokenExpiresAt', type: 'datetime' }
+      ]
+    }
+  }
+}
+
 output tableName string = uavTelemetry.name
 output tableId string = uavTelemetry.id
+output pgseTableName string = uavPgse.name
+output pgseTableId string = uavPgse.id

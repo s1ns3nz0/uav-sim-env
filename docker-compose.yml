@@ -78,8 +78,10 @@ services:
     environment:
       APPROVED_DB: "/data/approved_firmware.json"
       TOKEN_TTL_SEC: "300"
+      LOG_FILE_PATH: "/var/log/uav-sim-env/pgse.ndjson"
     volumes:
       - ./pgse-stub/data:/data:ro
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
     ports:
       - "8000:8000"
     restart: unless-stopped
