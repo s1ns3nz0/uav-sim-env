@@ -1,13 +1,15 @@
 # infra — Azure deployment
 
-Single-VM deployment of `uav-sim-env` on Azure Korea Central, defined in Bicep.
+Three-RG layout. Each Bicep is independently deployable and idempotent.
 
 ```
-main.bicep        VM + VNet + NSG + PIP + NIC (resource-group scope)
-cloud-init.yaml   First-boot bootstrap (Docker install, repo clone, systemd unit)
+main.bicep        uav-sim-env VM   -> dah-sim-rg
+data.bicep        Log Analytics + Sentinel -> dah-data-rg
+soc.bicep         AKS + ACR        -> dah-soc-rg
+cloud-init.yaml   VM bootstrap consumed by main.bicep
 ```
 
-The companion SOC platform (`pollack-ai`, LangGraph + kagent) runs on AKS in a separate deployment; this VM is intentionally simple because the simulation stack is UDP-heavy, GUI-heavy, and stateful, which all map poorly onto Kubernetes.
+**왜 3-RG**: 수명주기 분리. 시뮬은 자유롭게 재배포, AKS는 해커톤 내내 유지, Log Analytics는 가장 오래 살아남는 데이터 저장소 → 각자 격리.
 
 ---
 
@@ -120,5 +122,82 @@ az group delete -n "$RG" --yes --no-wait
 ## 8. 한계와 다음 단계
 
 - VM 단일 → 가용성 SLA 없음. 시연/PoC 용도.
-- Docker build를 VM 안에서 수행 → 첫 부팅이 느림. Phase 2에서 Azure Container Registry로 이미지 사전 푸시 + `docker compose pull` 만 수행하도록 변경 권장.
+- Docker build를 VM 안에서 수행 → 첫 부팅이 느림. ACR 사전 푸시 (`soc.bicep`로 만든 레지스트리) + `docker compose pull` 로 단축 가능.
 - Sentinel ingest 회선은 별도 작업 — Azure Monitor Agent를 telemetry-tap stdout에 붙이고 DCR(Data Collection Rule)을 정의해야 한다.
+
+---
+
+## 9. data.bicep — Log Analytics + Sentinel
+
+```bash
+az group create -n dah-data-rg -l koreacentral
+az deployment group create -g dah-data-rg -f data.bicep -n data-mvp
+
+# 출력값 (workspaceId 등 다른 RG에서 참조)
+az deployment group show -g dah-data-rg -n data-mvp --query properties.outputs
+```
+
+기본값:
+- 워크스페이스 이름 `dah-data-law`
+- 보존기간 30일
+- 일일 인제스트 캡 1 GB (비용 안전선)
+- Microsoft Sentinel 자동 활성화
+
+재배포는 같은 명령 그대로 다시 실행 (no-op). 보존기간만 늘리고 싶으면:
+```bash
+az deployment group create -g dah-data-rg -f data.bicep -n data-mvp -p retentionInDays=90
+```
+
+---
+
+## 10. soc.bicep — AKS + ACR
+
+```bash
+# 1) Log Analytics workspace id 가져오기
+WORKSPACE_ID=$(az deployment group show -g dah-data-rg -n data-mvp \
+  --query properties.outputs.workspaceId.value -o tsv)
+
+# 2) RG 만들고 배포
+az group create -n dah-soc-rg -l koreacentral
+az deployment group create -g dah-soc-rg -f soc.bicep -n soc-mvp \
+  -p workspaceId="$WORKSPACE_ID"
+
+# 3) kubeconfig 가져오기
+az aks get-credentials -g dah-soc-rg -n dah-soc-aks --overwrite-existing
+kubectl get nodes
+
+# 4) kagent 설치
+helm install kagent oci://ghcr.io/kagent-dev/kagent \
+  --namespace kagent --create-namespace
+```
+
+기본값:
+- AKS `dah-soc-aks`, Kubernetes 1.30, system 노드 2× D4s_v5
+- ACR Basic SKU, 이름은 `dahsocacr<hash>` 형태로 자동 유니크
+- AKS kubelet 신원이 ACR `AcrPull` 자동 부여 → `ImagePullSecrets` 불필요
+- `workspaceId` 전달 시 Container Insights 자동 활성화 → AKS 로그가 Sentinel과 같은 워크스페이스로
+
+재배포 시 노드 수만 조정:
+```bash
+az deployment group create -g dah-soc-rg -f soc.bicep -n soc-mvp -p systemNodeCount=3
+```
+
+---
+
+## 11. 전체 재배포 한 번에 (필요 시)
+
+```bash
+# 1) 데이터 레이어 먼저
+az deployment group create -g dah-data-rg -f data.bicep -n data-mvp
+
+# 2) SOC (데이터 레이어 출력 의존)
+WORKSPACE_ID=$(az deployment group show -g dah-data-rg -n data-mvp \
+  --query properties.outputs.workspaceId.value -o tsv)
+az deployment group create -g dah-soc-rg -f soc.bicep -n soc-mvp \
+  -p workspaceId="$WORKSPACE_ID"
+
+# 3) 시뮬 (독립)
+az deployment group create -g dah-sim-rg -f main.bicep -n uavsim-mvp \
+  -p adminPublicKey="$(cat ~/.ssh/id_ed25519.pub)" \
+  -p allowedSourceIp="$(curl -s ifconfig.me)/32"
+```
