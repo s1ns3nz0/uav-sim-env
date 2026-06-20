@@ -42,7 +42,7 @@ def _now_iso() -> str:
 
 
 def _record_from_event(event: dict[str, Any]) -> dict[str, Any]:
-    """Project a Docker engine event into a flat NDJSON-friendly record."""
+    """Project a Docker engine event into a flat NDJSON record matching the DCR stream schema."""
     actor = event.get("Actor") or {}
     attrs = actor.get("Attributes") or {}
     return {
@@ -52,12 +52,11 @@ def _record_from_event(event: dict[str, Any]) -> dict[str, Any]:
         "ActorId": actor.get("ID") or event.get("id"),
         "ContainerName": attrs.get("name", ""),
         "ImageName": attrs.get("image", "") or event.get("from", ""),
-        "ExitCode": attrs.get("exitCode", ""),
-        "Signal": attrs.get("signal", ""),
+        "ExitCode": str(attrs.get("exitCode", "")),
+        "Signal": str(attrs.get("signal", "")),
         "ServiceLabel": attrs.get("com.docker.compose.service", ""),
         "ProjectLabel": attrs.get("com.docker.compose.project", ""),
-        "Scope": event.get("scope"),
-        "Raw": event,
+        "Scope": event.get("scope") or "",
     }
 
 
