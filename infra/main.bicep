@@ -171,6 +171,13 @@ resource nic 'Microsoft.Network/networkInterfaces@2024-01-01' = {
 resource vm 'Microsoft.Compute/virtualMachines@2024-03-01' = {
   name: vmName
   location: location
+  identity: {
+    // SystemAssigned MSI lets Azure Monitor Agent obtain ingest tokens from
+    // IMDS without storing any secrets on disk. The role assignment that
+    // grants "Monitoring Metrics Publisher" on the DCR is done out-of-band
+    // (vm-monitoring stage) so the identity exists first.
+    type: 'SystemAssigned'
+  }
   properties: {
     hardwareProfile: { vmSize: vmSize }
     osProfile: {
