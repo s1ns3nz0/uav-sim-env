@@ -47,6 +47,7 @@ RUN bash -lc "./waf configure --board sitl && ./waf plane"
 # MPD persona files
 COPY --chown=$USER:$USER persona/ /home/$USER/persona/
 COPY --chown=$USER:$USER world/ /home/$USER/world/
+COPY --chown=$USER:$USER bootstrap.py /home/$USER/bootstrap.py
 COPY --chown=$USER:$USER entrypoint.sh /home/$USER/entrypoint.sh
 RUN sudo chmod +x /home/$USER/entrypoint.sh
 

@@ -13,8 +13,15 @@ MAVLINK_OUT_HOST="${MAVLINK_OUT_HOST:-datalink-los}"
 MAVLINK_OUT_PORT="${MAVLINK_OUT_PORT:-14550}"
 
 PERSONA_PARAM="/home/sitl/persona/mpd_quadplane.parm"
+BOOTSTRAP_SCRIPT="/home/sitl/bootstrap.py"
 LOG_DIR="/home/sitl/logs"
 mkdir -p "$LOG_DIR"
+
+# Run the post-boot bootstrap in the background. It sleeps until SITL + router
+# are up, then forces ARMING_CHECK=0 and MISSION_CURRENT=0 over MAVLink.
+if [ -f "$BOOTSTRAP_SCRIPT" ]; then
+    (python3 "$BOOTSTRAP_SCRIPT" || true) &
+fi
 
 cd /home/sitl/ardupilot
 
