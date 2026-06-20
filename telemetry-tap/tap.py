@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -37,6 +38,20 @@ OPERATOR_FILE_PATH: str = os.environ.get("OPERATOR_FILE_PATH", "")
 # raw stream (takeoff_initiated, waypoint_reached, roi_set, land_initiated...).
 # Feeds UAVMissionEvent_CL for timeline rules and after-action review.
 MISSION_FILE_PATH: str = os.environ.get("MISSION_FILE_PATH", "")
+
+# Failsafe sink — STATUSTEXT severity <= warning OR mode transitions to a
+# failsafe mode (RTL/QRTL/LAND/QLAND).
+FAILSAFE_FILE_PATH: str = os.environ.get("FAILSAFE_FILE_PATH", "")
+
+# Config audit sink — PARAM_VALUE rows whose value differs from the last seen.
+CONFIG_AUDIT_FILE_PATH: str = os.environ.get("CONFIG_AUDIT_FILE_PATH", "")
+
+# Imagery / payload sink — camera trigger, image captured, video stream info.
+IMAGERY_FILE_PATH: str = os.environ.get("IMAGERY_FILE_PATH", "")
+
+# MAVSec sink — signing summary every MAVSEC_INTERVAL_SEC.
+MAVSEC_FILE_PATH: str = os.environ.get("MAVSEC_FILE_PATH", "")
+MAVSEC_INTERVAL_SEC: int = int(os.environ.get("MAVSEC_INTERVAL_SEC", "30"))
 
 # MAVLink message types that represent operator-initiated control actions.
 OPERATOR_MSG_TYPES: frozenset[str] = frozenset({
@@ -80,6 +95,11 @@ FORWARDED_MSG_TYPES: frozenset[str] = frozenset({
     "COMMAND_LONG",
     "COMMAND_ACK",
     "PARAM_VALUE",
+    "CAMERA_TRIGGER",
+    "CAMERA_IMAGE_CAPTURED",
+    "VIDEO_STREAM_INFORMATION",
+    "MOUNT_ORIENTATION",
+    "CAMERA_INFORMATION",
 })
 
 
@@ -101,11 +121,36 @@ def _log(line: str) -> None:
 _log_file_handle = None
 _operator_file_handle = None
 _mission_file_handle = None
+_failsafe_file_handle = None
+_config_audit_file_handle = None
+_imagery_file_handle = None
+_mavsec_file_handle = None
 
 # Stateful trackers used to derive named mission events from the message stream.
 _last_mode: int | None = None
 _last_mission_seq: int | None = None
 _last_position: dict[str, float | None] = {"Lat": None, "Lon": None, "AltMSL_m": None}
+_param_state: dict[str, float] = {}
+_mavsec_signed = 0
+_mavsec_unsigned = 0
+_mavsec_last_emit_ts: float = 0.0
+
+# Failsafe-flavoured ArduPilot modes (custom_mode int). Mirrors mode_change
+# numbers we are most interested in (ArduPlane + Quadplane).
+FAILSAFE_MODES: frozenset[int] = frozenset({
+    11, # RTL (ArduPlane)
+    25, # QRTL
+    21, # QLand
+})
+
+# MAVLink message types that represent operator-initiated control actions.
+IMAGERY_MSG_TYPES: frozenset[str] = frozenset({
+    "CAMERA_TRIGGER",
+    "CAMERA_IMAGE_CAPTURED",
+    "VIDEO_STREAM_INFORMATION",
+    "MOUNT_ORIENTATION",
+    "CAMERA_INFORMATION",
+})
 
 
 def _derive_action(record: dict[str, Any]) -> str:
@@ -198,6 +243,103 @@ def _maybe_derive_mission_events(record: dict[str, Any]) -> None:
         _emit_mission_event(named, record)
 
 
+def _maybe_emit_failsafe(record: dict[str, Any]) -> None:
+    if _failsafe_file_handle is None:
+        return
+    msg_type = record.get("MsgType")
+    payload: dict[str, Any] | None = None
+    if msg_type == "STATUSTEXT":
+        severity = record.get("Severity")
+        if isinstance(severity, int) and severity <= 4:
+            payload = {
+                "TimeGenerated": record.get("TimeGenerated"),
+                "UAVId": record.get("UAVId"),
+                "EventType": "statustext_warning",
+                "Severity": severity,
+                "Text": record.get("Text"),
+            }
+    elif msg_type == "HEARTBEAT":
+        current = record.get("CustomMode")
+        if isinstance(current, int) and current in FAILSAFE_MODES and current != _last_mode:
+            payload = {
+                "TimeGenerated": record.get("TimeGenerated"),
+                "UAVId": record.get("UAVId"),
+                "EventType": "mode_failsafe_transition",
+                "ModeBefore": _last_mode,
+                "ModeAfter": current,
+                "Severity": 4,
+            }
+    if payload is None:
+        return
+    _failsafe_file_handle.write(json.dumps(payload, separators=(",", ":"), default=str) + "\n")
+    _failsafe_file_handle.flush()
+
+
+def _maybe_emit_config_audit(record: dict[str, Any]) -> None:
+    if _config_audit_file_handle is None or record.get("MsgType") != "PARAM_VALUE":
+        return
+    param_id = record.get("ParamId")
+    new_value = record.get("ParamValue")
+    if not isinstance(param_id, str) or new_value is None:
+        return
+    previous = _param_state.get(param_id)
+    if previous is not None and previous == new_value:
+        return  # no change
+    payload = {
+        "TimeGenerated": record.get("TimeGenerated"),
+        "UAVId": record.get("UAVId"),
+        "EventType": "param_changed" if previous is not None else "persona_loaded",
+        "ParamId": param_id,
+        "ParamValueBefore": previous,
+        "ParamValueAfter": new_value,
+        "Source": "sitl",
+    }
+    _param_state[param_id] = new_value
+    _config_audit_file_handle.write(json.dumps(payload, separators=(",", ":"), default=str) + "\n")
+    _config_audit_file_handle.flush()
+
+
+def _maybe_emit_imagery(record: dict[str, Any]) -> None:
+    if _imagery_file_handle is None or record.get("MsgType") not in IMAGERY_MSG_TYPES:
+        return
+    payload = {
+        "TimeGenerated": record.get("TimeGenerated"),
+        "UAVId": record.get("UAVId"),
+        "EventType": record.get("MsgType", "").lower(),
+        "MsgType": record.get("MsgType"),
+    }
+    _imagery_file_handle.write(json.dumps(payload, separators=(",", ":"), default=str) + "\n")
+    _imagery_file_handle.flush()
+
+
+def _maybe_emit_mavsec(msg: Any, record: dict[str, Any]) -> None:
+    global _mavsec_signed, _mavsec_unsigned, _mavsec_last_emit_ts
+    if _mavsec_file_handle is None:
+        return
+    is_signed = bool(getattr(msg, "_signed", False))
+    if is_signed:
+        _mavsec_signed += 1
+    else:
+        _mavsec_unsigned += 1
+    now = time.time()
+    if now - _mavsec_last_emit_ts < MAVSEC_INTERVAL_SEC:
+        return
+    payload = {
+        "TimeGenerated": record.get("TimeGenerated"),
+        "UAVId": record.get("UAVId"),
+        "EventType": "signing_check_summary",
+        "SignedCount": _mavsec_signed,
+        "UnsignedCount": _mavsec_unsigned,
+        "FailedCount": 0,
+        "WindowSec": MAVSEC_INTERVAL_SEC,
+    }
+    _mavsec_file_handle.write(json.dumps(payload, separators=(",", ":"), default=str) + "\n")
+    _mavsec_file_handle.flush()
+    _mavsec_signed = 0
+    _mavsec_unsigned = 0
+    _mavsec_last_emit_ts = now
+
+
 def _emit(record: dict[str, Any]) -> None:
     """Serialize a record as a single-line JSON document on stdout (and file sinks)."""
     line = json.dumps(record, separators=(",", ":"), default=str) + "\n"
@@ -207,6 +349,9 @@ def _emit(record: dict[str, Any]) -> None:
         _log_file_handle.write(line)
         _log_file_handle.flush()
     _maybe_derive_mission_events(record)
+    _maybe_emit_failsafe(record)
+    _maybe_emit_config_audit(record)
+    _maybe_emit_imagery(record)
     if _operator_file_handle is not None and record.get("MsgType") in OPERATOR_MSG_TYPES:
         op_record = {
             "TimeGenerated": record.get("TimeGenerated"),
@@ -382,6 +527,7 @@ def _record_for(msg: Any) -> dict[str, Any]:
 def main() -> None:
     """Run the UDP subscriber loop and emit NDJSON to stdout."""
     global _log_file_handle, _operator_file_handle, _mission_file_handle
+    global _failsafe_file_handle, _config_audit_file_handle, _imagery_file_handle, _mavsec_file_handle
     if LOG_FILE_PATH:
         os.makedirs(os.path.dirname(LOG_FILE_PATH) or ".", exist_ok=True)
         _log_file_handle = open(LOG_FILE_PATH, "a", encoding="utf-8")
@@ -394,6 +540,22 @@ def main() -> None:
         os.makedirs(os.path.dirname(MISSION_FILE_PATH) or ".", exist_ok=True)
         _mission_file_handle = open(MISSION_FILE_PATH, "a", encoding="utf-8")
         _log(f"mission sink active: {MISSION_FILE_PATH}")
+    if FAILSAFE_FILE_PATH:
+        os.makedirs(os.path.dirname(FAILSAFE_FILE_PATH) or ".", exist_ok=True)
+        _failsafe_file_handle = open(FAILSAFE_FILE_PATH, "a", encoding="utf-8")
+        _log(f"failsafe sink active: {FAILSAFE_FILE_PATH}")
+    if CONFIG_AUDIT_FILE_PATH:
+        os.makedirs(os.path.dirname(CONFIG_AUDIT_FILE_PATH) or ".", exist_ok=True)
+        _config_audit_file_handle = open(CONFIG_AUDIT_FILE_PATH, "a", encoding="utf-8")
+        _log(f"config-audit sink active: {CONFIG_AUDIT_FILE_PATH}")
+    if IMAGERY_FILE_PATH:
+        os.makedirs(os.path.dirname(IMAGERY_FILE_PATH) or ".", exist_ok=True)
+        _imagery_file_handle = open(IMAGERY_FILE_PATH, "a", encoding="utf-8")
+        _log(f"imagery sink active: {IMAGERY_FILE_PATH}")
+    if MAVSEC_FILE_PATH:
+        os.makedirs(os.path.dirname(MAVSEC_FILE_PATH) or ".", exist_ok=True)
+        _mavsec_file_handle = open(MAVSEC_FILE_PATH, "a", encoding="utf-8")
+        _log(f"mavsec sink active: {MAVSEC_FILE_PATH}")
 
     conn_str = f"udpin:{LISTEN_HOST}:{LISTEN_PORT}"
     _log(f"binding {conn_str}, UAVId={UAV_ID}")
@@ -419,6 +581,7 @@ def main() -> None:
             continue
 
         _emit(record)
+        _maybe_emit_mavsec(msg, record)
         msg_count += 1
 
         # Heartbeat log every ~500 records so operators see liveness on stderr.

@@ -63,6 +63,11 @@ services:
       LOG_FILE_PATH: "/var/log/uav-sim-env/telemetry.ndjson"
       OPERATOR_FILE_PATH: "/var/log/uav-sim-env/operator.ndjson"
       MISSION_FILE_PATH: "/var/log/uav-sim-env/mission.ndjson"
+      FAILSAFE_FILE_PATH: "/var/log/uav-sim-env/failsafe.ndjson"
+      CONFIG_AUDIT_FILE_PATH: "/var/log/uav-sim-env/config-audit.ndjson"
+      IMAGERY_FILE_PATH: "/var/log/uav-sim-env/imagery.ndjson"
+      MAVSEC_FILE_PATH: "/var/log/uav-sim-env/mavsec.ndjson"
+      MAVSEC_INTERVAL_SEC: "30"
     volumes:
       - /var/log/uav-sim-env:/var/log/uav-sim-env
     depends_on:
@@ -106,6 +111,10 @@ services:
       TARGET_CONTAINER: "uav-datalink-los"
       POLL_INTERVAL: "30"
       LOG_FILE_PATH: "/var/log/uav-sim-env/datalink-stats.ndjson"
+      RESOURCE_FILE_PATH: "/var/log/uav-sim-env/resource-metrics.ndjson"
+      CONN_FILE_PATH: "/var/log/uav-sim-env/datalink-conn.ndjson"
+      PROJECT_LABEL: "uav-sim-env"
+      CONN_PORTS: "5760,5790,14550,14551,14552"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/log/uav-sim-env:/var/log/uav-sim-env
@@ -143,6 +152,55 @@ services:
       - "8300:8300"
     restart: unless-stopped
 
+  weapon-stub:
+    build:
+      context: ./weapon-stub
+    container_name: uav-weapon-stub
+    hostname: weapon-stub
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.90
+    environment:
+      LOG_FILE_PATH: "/var/log/uav-sim-env/weapon.ndjson"
+    volumes:
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
+    ports:
+      - "8400:8400"
+    restart: unless-stopped
+
+  ti-stub:
+    build:
+      context: ./ti-stub
+    container_name: uav-ti-stub
+    hostname: ti-stub
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.100
+    environment:
+      LOG_FILE_PATH: "/var/log/uav-sim-env/ti.ndjson"
+    volumes:
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
+    ports:
+      - "8500:8500"
+    restart: unless-stopped
+
+  auth-stub:
+    build:
+      context: ./auth-stub
+    container_name: uav-auth-stub
+    hostname: auth-stub
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.110
+    environment:
+      LOG_FILE_PATH: "/var/log/uav-sim-env/auth.ndjson"
+      SESSION_TTL_SEC: "3600"
+    volumes:
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
+    ports:
+      - "8600:8600"
+    restart: unless-stopped
+
   pgse-stub:
     build:
       context: ./pgse-stub
@@ -155,6 +213,7 @@ services:
       APPROVED_DB: "/data/approved_firmware.json"
       TOKEN_TTL_SEC: "300"
       LOG_FILE_PATH: "/var/log/uav-sim-env/pgse.ndjson"
+      MAINT_FILE_PATH: "/var/log/uav-sim-env/maintenance.ndjson"
     volumes:
       - ./pgse-stub/data:/data:ro
       - /var/log/uav-sim-env:/var/log/uav-sim-env

@@ -31,6 +31,7 @@ APPROVED_DB: Path = Path(os.environ.get("APPROVED_DB", "/data/approved_firmware.
 TOKEN_TTL_SEC: int = int(os.environ.get("TOKEN_TTL_SEC", "300"))
 FORBIDDEN_SBOM_PREFIXES: tuple[str, ...] = ("unsigned/", "untrusted/")
 LOG_FILE_PATH: str = os.environ.get("LOG_FILE_PATH", "")
+MAINT_FILE_PATH: str = os.environ.get("MAINT_FILE_PATH", "")
 
 app = FastAPI(
     title="pgse-stub",
@@ -41,6 +42,7 @@ app = FastAPI(
 _launch_tokens: dict[str, dict[str, Any]] = {}
 _last_preflight: dict[str, dict[str, Any]] = {}
 _log_file_handle = None
+_maint_file_handle = None
 
 
 def _now_iso() -> str:
@@ -62,11 +64,89 @@ def _emit_event(event: dict[str, Any]) -> None:
 
 @app.on_event("startup")
 def _open_log_sink() -> None:
-    global _log_file_handle
-    if not LOG_FILE_PATH:
+    global _log_file_handle, _maint_file_handle
+    if LOG_FILE_PATH:
+        os.makedirs(os.path.dirname(LOG_FILE_PATH) or ".", exist_ok=True)
+        _log_file_handle = open(LOG_FILE_PATH, "a", encoding="utf-8")
+    if MAINT_FILE_PATH:
+        os.makedirs(os.path.dirname(MAINT_FILE_PATH) or ".", exist_ok=True)
+        _maint_file_handle = open(MAINT_FILE_PATH, "a", encoding="utf-8")
+
+
+def _emit_maintenance(event: dict[str, Any]) -> None:
+    if _maint_file_handle is None:
         return
-    os.makedirs(os.path.dirname(LOG_FILE_PATH) or ".", exist_ok=True)
-    _log_file_handle = open(LOG_FILE_PATH, "a", encoding="utf-8")
+    enriched = {"TimeGenerated": _now_iso(), **event}
+    _maint_file_handle.write(json.dumps(enriched, separators=(",", ":"), default=str) + "\n")
+    _maint_file_handle.flush()
+
+
+class BatteryCycleLog(BaseModel):
+    uav_id: str
+    battery_id: str
+    cycle_count: int
+    voltage_min: float
+    voltage_max: float
+    operator: str
+
+
+class CalibrationLog(BaseModel):
+    uav_id: str
+    component: str = Field(..., examples=["compass", "accel", "gyro", "esc"])
+    operator: str
+    notes: str = ""
+
+
+class InspectionSign(BaseModel):
+    uav_id: str
+    checklist_id: str
+    items_passed: int
+    items_total: int
+    operator: str
+    notes: str = ""
+
+
+@app.post("/maintenance/battery/cycle", tags=["maintenance"])
+def battery_cycle(req: BatteryCycleLog) -> dict[str, Any]:
+    _emit_maintenance({
+        "EventType": "battery_cycle_logged",
+        "UAVId": req.uav_id,
+        "BatteryId": req.battery_id,
+        "CycleCount": req.cycle_count,
+        "VoltageMin": req.voltage_min,
+        "VoltageMax": req.voltage_max,
+        "Operator": req.operator,
+        "StatusCode": 200,
+    })
+    return {"ok": True}
+
+
+@app.post("/maintenance/calibration", tags=["maintenance"])
+def calibration(req: CalibrationLog) -> dict[str, Any]:
+    _emit_maintenance({
+        "EventType": "calibration_completed",
+        "UAVId": req.uav_id,
+        "ComponentName": req.component,
+        "Operator": req.operator,
+        "Notes": req.notes,
+        "StatusCode": 200,
+    })
+    return {"ok": True}
+
+
+@app.post("/maintenance/inspection/sign", tags=["maintenance"])
+def inspection_sign(req: InspectionSign) -> dict[str, Any]:
+    _emit_maintenance({
+        "EventType": "inspection_signed",
+        "UAVId": req.uav_id,
+        "ChecklistId": req.checklist_id,
+        "ItemsPassed": req.items_passed,
+        "ItemsTotal": req.items_total,
+        "Operator": req.operator,
+        "Notes": req.notes,
+        "StatusCode": 200,
+    })
+    return {"ok": True}
 
 
 def _load_approved() -> dict[str, str]:

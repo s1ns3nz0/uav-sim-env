@@ -394,6 +394,241 @@ resource uavCyberPosture 'Microsoft.OperationalInsights/workspaces/tables@2023-0
   }
 }
 
+resource uavWeapon 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVWeapon_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 180
+    totalRetentionInDays: 730
+    schema: {
+      name: 'UAVWeapon_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'WeaponId', type: 'string' }
+        { name: 'Operator', type: 'string' }
+        { name: 'TargetId', type: 'string' }
+        { name: 'SafetyState', type: 'string' }
+        { name: 'SafetyStateBefore', type: 'string' }
+        { name: 'ArmedBy', type: 'string' }
+        { name: 'Status', type: 'string' }
+        { name: 'FailReason', type: 'string' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
+resource uavThreatIntel 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVThreatIntel_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 180
+    totalRetentionInDays: 365
+    schema: {
+      name: 'UAVThreatIntel_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'IndicatorType', type: 'string' }
+        { name: 'Indicator', type: 'string' }
+        { name: 'Severity', type: 'string' }
+        { name: 'ConfidencePct', type: 'int' }
+        { name: 'Source', type: 'string' }
+        { name: 'Description', type: 'string' }
+        { name: 'FeedName', type: 'string' }
+        { name: 'IndicatorCount', type: 'int' }
+        { name: 'Recommendation', type: 'string' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
+resource uavOpAudit 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVOpAudit_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 365
+    schema: {
+      name: 'UAVOpAudit_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'Operator', type: 'string' }
+        { name: 'ClientIp', type: 'string' }
+        { name: 'UserAgent', type: 'string' }
+        { name: 'SessionId', type: 'string' }
+        { name: 'FailReason', type: 'string' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
+resource uavFailsafe 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVFailsafe_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVFailsafe_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'EventType', type: 'string' }
+        { name: 'Severity', type: 'int' }
+        { name: 'Text', type: 'string' }
+        { name: 'ModeBefore', type: 'int' }
+        { name: 'ModeAfter', type: 'int' }
+      ]
+    }
+  }
+}
+
+resource uavMavsec 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVMavsec_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 30
+    totalRetentionInDays: 90
+    schema: {
+      name: 'UAVMavsec_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'EventType', type: 'string' }
+        { name: 'SignedCount', type: 'long' }
+        { name: 'UnsignedCount', type: 'long' }
+        { name: 'FailedCount', type: 'long' }
+        { name: 'WindowSec', type: 'int' }
+      ]
+    }
+  }
+}
+
+resource uavMaintenance 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVMaintenance_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 365
+    totalRetentionInDays: 730
+    schema: {
+      name: 'UAVMaintenance_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'Operator', type: 'string' }
+        { name: 'BatteryId', type: 'string' }
+        { name: 'CycleCount', type: 'int' }
+        { name: 'VoltageMin', type: 'real' }
+        { name: 'VoltageMax', type: 'real' }
+        { name: 'ComponentName', type: 'string' }
+        { name: 'ChecklistId', type: 'string' }
+        { name: 'ItemsPassed', type: 'int' }
+        { name: 'ItemsTotal', type: 'int' }
+        { name: 'Notes', type: 'string' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
+resource uavImagery 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVImagery_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVImagery_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'EventType', type: 'string' }
+        { name: 'MsgType', type: 'string' }
+      ]
+    }
+  }
+}
+
+resource uavConfigAudit 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVConfigAudit_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 180
+    totalRetentionInDays: 730
+    schema: {
+      name: 'UAVConfigAudit_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'EventType', type: 'string' }
+        { name: 'ParamId', type: 'string' }
+        { name: 'ParamValueBefore', type: 'real' }
+        { name: 'ParamValueAfter', type: 'real' }
+        { name: 'Source', type: 'string' }
+      ]
+    }
+  }
+}
+
+resource uavResourceMetrics 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVResourceMetrics_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 30
+    totalRetentionInDays: 90
+    schema: {
+      name: 'UAVResourceMetrics_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'ContainerName', type: 'string' }
+        { name: 'CpuUsagePct', type: 'real' }
+        { name: 'MemoryUsageBytes', type: 'long' }
+        { name: 'MemoryLimitBytes', type: 'long' }
+        { name: 'NetworkRxBytes', type: 'long' }
+        { name: 'NetworkTxBytes', type: 'long' }
+        { name: 'BlockReadBytes', type: 'long' }
+        { name: 'BlockWriteBytes', type: 'long' }
+      ]
+    }
+  }
+}
+
+resource uavDatalinkConn 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVDatalinkConn_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 30
+    totalRetentionInDays: 90
+    schema: {
+      name: 'UAVDatalinkConn_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'State', type: 'string' }
+        { name: 'LocalIp', type: 'string' }
+        { name: 'LocalPort', type: 'int' }
+        { name: 'PeerIp', type: 'string' }
+        { name: 'PeerPort', type: 'int' }
+      ]
+    }
+  }
+}
+
 output tableName string = uavTelemetry.name
 output tableId string = uavTelemetry.id
 output pgseTableName string = uavPgse.name
@@ -406,3 +641,13 @@ output missionPlanTableName string = uavMissionPlan.name
 output datalinkTableName string = uavDatalink.name
 output c4iTableName string = uavC4i.name
 output cyberPostureTableName string = uavCyberPosture.name
+output weaponTableName string = uavWeapon.name
+output threatIntelTableName string = uavThreatIntel.name
+output opAuditTableName string = uavOpAudit.name
+output failsafeTableName string = uavFailsafe.name
+output mavsecTableName string = uavMavsec.name
+output maintenanceTableName string = uavMaintenance.name
+output imageryTableName string = uavImagery.name
+output configAuditTableName string = uavConfigAudit.name
+output resourceMetricsTableName string = uavResourceMetrics.name
+output datalinkConnTableName string = uavDatalinkConn.name
