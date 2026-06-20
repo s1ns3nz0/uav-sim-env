@@ -28,6 +28,33 @@ LISTEN_PORT: int = int(os.environ.get("LISTEN_PORT", "14552"))
 # If set, every NDJSON record is also appended to this file (one JSON per line).
 LOG_FILE_PATH: str = os.environ.get("LOG_FILE_PATH", "")
 
+# Optional secondary sink — only operator-relevant records (commands, mission
+# lifecycle, mode changes). Designed to feed UAVOperator_CL for forensic and
+# insider-threat rules.
+OPERATOR_FILE_PATH: str = os.environ.get("OPERATOR_FILE_PATH", "")
+
+# MAVLink message types that represent operator-initiated control actions.
+OPERATOR_MSG_TYPES: frozenset[str] = frozenset({
+    "COMMAND_LONG",
+    "COMMAND_ACK",
+    "MISSION_CURRENT",
+    "MISSION_ITEM_REACHED",
+})
+
+# MAV_CMD numeric ids worth labelling explicitly. Anything else gets
+# "command_<id>" so downstream rules can still match on Command.
+_MAV_CMD_ACTION: dict[int, str] = {
+    20: "rtl",
+    21: "land",
+    22: "takeoff",
+    84: "vtol_takeoff",
+    85: "vtol_land",
+    176: "mode_change",
+    195: "set_roi_location",
+    197: "set_roi_none",
+    400: "arm_disarm",
+}
+
 # Messages worth forwarding to the SOC pipeline. Anything else is dropped to
 # keep ingest volume bounded.
 FORWARDED_MSG_TYPES: frozenset[str] = frozenset({
@@ -67,16 +94,59 @@ def _log(line: str) -> None:
 
 
 _log_file_handle = None
+_operator_file_handle = None
+
+
+def _derive_action(record: dict[str, Any]) -> str:
+    """Map a forwarded record to a normalised operator action name."""
+    msg_type = record.get("MsgType", "")
+    if msg_type == "COMMAND_LONG":
+        command = record.get("Command")
+        if isinstance(command, int):
+            return _MAV_CMD_ACTION.get(command, f"command_{command}")
+        return "command_unknown"
+    if msg_type == "COMMAND_ACK":
+        command = record.get("Command")
+        if isinstance(command, int):
+            return f"ack_{_MAV_CMD_ACTION.get(command, str(command))}"
+        return "ack_unknown"
+    if msg_type == "MISSION_CURRENT":
+        return "mission_current_changed"
+    if msg_type == "MISSION_ITEM_REACHED":
+        return "mission_waypoint_reached"
+    return msg_type.lower()
 
 
 def _emit(record: dict[str, Any]) -> None:
-    """Serialize a record as a single-line JSON document on stdout (and file sink)."""
+    """Serialize a record as a single-line JSON document on stdout (and file sinks)."""
     line = json.dumps(record, separators=(",", ":"), default=str) + "\n"
     sys.stdout.write(line)
     sys.stdout.flush()
     if _log_file_handle is not None:
         _log_file_handle.write(line)
         _log_file_handle.flush()
+    if _operator_file_handle is not None and record.get("MsgType") in OPERATOR_MSG_TYPES:
+        op_record = {
+            "TimeGenerated": record.get("TimeGenerated"),
+            "UAVId": record.get("UAVId"),
+            "ActionName": _derive_action(record),
+            "MsgType": record.get("MsgType"),
+            "SourceSystemId": record.get("SystemId"),
+            "SourceComponentId": record.get("ComponentId"),
+            "TargetSystemId": record.get("TargetSystem"),
+            "TargetComponentId": record.get("TargetComponent"),
+            "Command": record.get("Command"),
+            "Confirmation": record.get("Confirmation"),
+            "Param1": record.get("Param1"),
+            "Param2": record.get("Param2"),
+            "Param3": record.get("Param3"),
+            "Param4": record.get("Param4"),
+            "Result": record.get("Result"),
+            "Seq": record.get("Seq"),
+        }
+        op_line = json.dumps(op_record, separators=(",", ":"), default=str) + "\n"
+        _operator_file_handle.write(op_line)
+        _operator_file_handle.flush()
 
 
 def _record_for(msg: Any) -> dict[str, Any]:
@@ -229,11 +299,15 @@ def _record_for(msg: Any) -> dict[str, Any]:
 
 def main() -> None:
     """Run the UDP subscriber loop and emit NDJSON to stdout."""
-    global _log_file_handle
+    global _log_file_handle, _operator_file_handle
     if LOG_FILE_PATH:
         os.makedirs(os.path.dirname(LOG_FILE_PATH) or ".", exist_ok=True)
         _log_file_handle = open(LOG_FILE_PATH, "a", encoding="utf-8")
         _log(f"file sink active: {LOG_FILE_PATH}")
+    if OPERATOR_FILE_PATH:
+        os.makedirs(os.path.dirname(OPERATOR_FILE_PATH) or ".", exist_ok=True)
+        _operator_file_handle = open(OPERATOR_FILE_PATH, "a", encoding="utf-8")
+        _log(f"operator sink active: {OPERATOR_FILE_PATH}")
 
     conn_str = f"udpin:{LISTEN_HOST}:{LISTEN_PORT}"
     _log(f"binding {conn_str}, UAVId={UAV_ID}")

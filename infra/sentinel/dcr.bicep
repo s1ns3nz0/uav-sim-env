@@ -26,12 +26,17 @@ param telemetryLogPath string = '/var/log/uav-sim-env/telemetry.ndjson'
 @description('PGSE decision NDJSON file path on the VM (pgse-stub output).')
 param pgseLogPath string = '/var/log/uav-sim-env/pgse.ndjson'
 
+@description('Operator event NDJSON file path on the VM (telemetry-tap operator filter).')
+param operatorLogPath string = '/var/log/uav-sim-env/operator.ndjson'
+
 var dceName = '${namePrefix}-dce'
 var dcrName = '${namePrefix}-uav-dcr'
 var streamName = 'Custom-UAVTelemetry'
 var pgseStreamName = 'Custom-UAVPgse'
+var operatorStreamName = 'Custom-UAVOperator'
 var tableName = 'UAVTelemetry_CL'
 var pgseTableName = 'UAVPgse_CL'
+var operatorTableName = 'UAVOperator_CL'
 
 resource law 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -144,6 +149,27 @@ var pgseStreamColumns = [
   { name: 'TokenExpiresAt', type: 'datetime' }
 ]
 
+// Operator-event stream: subset of telemetry containing commands, mode
+// changes and mission lifecycle markers.
+var operatorStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'UAVId', type: 'string' }
+  { name: 'ActionName', type: 'string' }
+  { name: 'MsgType', type: 'string' }
+  { name: 'SourceSystemId', type: 'int' }
+  { name: 'SourceComponentId', type: 'int' }
+  { name: 'TargetSystemId', type: 'int' }
+  { name: 'TargetComponentId', type: 'int' }
+  { name: 'Command', type: 'int' }
+  { name: 'Confirmation', type: 'int' }
+  { name: 'Param1', type: 'real' }
+  { name: 'Param2', type: 'real' }
+  { name: 'Param3', type: 'real' }
+  { name: 'Param4', type: 'real' }
+  { name: 'Result', type: 'int' }
+  { name: 'Seq', type: 'int' }
+]
+
 resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
   name: dcrName
   location: location
@@ -156,6 +182,9 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       }
       '${pgseStreamName}': {
         columns: pgseStreamColumns
+      }
+      '${operatorStreamName}': {
+        columns: operatorStreamColumns
       }
     }
     dataSources: {
@@ -170,6 +199,12 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
           name: 'uavPgseFile'
           streams: [ pgseStreamName ]
           filePatterns: [ pgseLogPath ]
+          format: 'json'
+        }
+        {
+          name: 'uavOperatorFile'
+          streams: [ operatorStreamName ]
+          filePatterns: [ operatorLogPath ]
           format: 'json'
         }
       ]
@@ -195,6 +230,12 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
         transformKql: 'source'
         outputStream: 'Custom-${pgseTableName}'
       }
+      {
+        streams: [ operatorStreamName ]
+        destinations: [ 'centralLaw' ]
+        transformKql: 'source'
+        outputStream: 'Custom-${operatorTableName}'
+      }
     ]
   }
 }
@@ -207,3 +248,4 @@ output dcrId string = dcr.id
 output dcrImmutableId string = dcr.properties.immutableId
 output telemetryStreamName string = streamName
 output pgseStreamName string = pgseStreamName
+output operatorStreamName string = operatorStreamName

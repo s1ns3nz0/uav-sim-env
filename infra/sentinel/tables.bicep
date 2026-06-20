@@ -173,7 +173,43 @@ resource uavPgse 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = 
   }
 }
 
+// Custom Log Table for operator-control events (commands, mode changes,
+// mission lifecycle). Filtered subset of UAVTelemetry — same retention class
+// but separated so insider-threat / forensics rules can scope cheaply.
+resource uavOperator 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVOperator_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVOperator_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'ActionName', type: 'string' }
+        { name: 'MsgType', type: 'string' }
+        { name: 'SourceSystemId', type: 'int' }
+        { name: 'SourceComponentId', type: 'int' }
+        { name: 'TargetSystemId', type: 'int' }
+        { name: 'TargetComponentId', type: 'int' }
+        { name: 'Command', type: 'int' }
+        { name: 'Confirmation', type: 'int' }
+        { name: 'Param1', type: 'real' }
+        { name: 'Param2', type: 'real' }
+        { name: 'Param3', type: 'real' }
+        { name: 'Param4', type: 'real' }
+        { name: 'Result', type: 'int' }
+        { name: 'Seq', type: 'int' }
+      ]
+    }
+  }
+}
+
 output tableName string = uavTelemetry.name
 output tableId string = uavTelemetry.id
 output pgseTableName string = uavPgse.name
 output pgseTableId string = uavPgse.id
+output operatorTableName string = uavOperator.name
+output operatorTableId string = uavOperator.id
