@@ -17,8 +17,11 @@
 @description('Name of the VM. Default matches main.bicep output.')
 param vmName string = 'uavsim-vm'
 
-@description('Full resource id of the DCR to associate (cross-RG ok).')
+@description('Full resource id of the primary DCR to associate (cross-RG ok).')
 param dcrId string
+
+@description('Optional secondary DCR id for overflow streams (empty = skip).')
+param dcrIdExtras string = ''
 
 @description('Azure region. Must match the VM.')
 param location string = 'koreacentral'
@@ -45,7 +48,17 @@ resource dcra 'Microsoft.Insights/dataCollectionRuleAssociations@2023-03-11' = {
   scope: vm
   properties: {
     dataCollectionRuleId: dcrId
-    description: 'Ships telemetry.ndjson from uavsim-vm to UAVTelemetry_CL.'
+    description: 'Primary DCR — first 10 NDJSON streams.'
+  }
+  dependsOn: [ ama ]
+}
+
+resource dcraExtras 'Microsoft.Insights/dataCollectionRuleAssociations@2023-03-11' = if (!empty(dcrIdExtras)) {
+  name: 'uav-dcr-association-extras'
+  scope: vm
+  properties: {
+    dataCollectionRuleId: dcrIdExtras
+    description: 'Secondary DCR — overflow NDJSON streams beyond the 10-logFiles cap.'
   }
   dependsOn: [ ama ]
 }
