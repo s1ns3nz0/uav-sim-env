@@ -8,7 +8,7 @@
         "cruiseSpeed": 18,
         "firmwareType": 3,
         "hoverSpeed": 5,
-        "vehicleType": 22,
+        "vehicleType": 1,
         "version": 2,
         "globalPlanAltitudeMode": 1,
         "plannedHomePosition": [37.5326, 127.0246, 50],
