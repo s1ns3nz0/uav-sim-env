@@ -296,6 +296,104 @@ resource uavMissionPlan 'Microsoft.OperationalInsights/workspaces/tables@2023-09
   }
 }
 
+// Datalink health snapshot — container-level network counters polled every
+// 30 sec by the datalink-stats sidecar. KQL rules compute deltas to detect
+// jamming-like packet loss spikes or unauthorised secondary traffic.
+resource uavDatalink 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVDatalink_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 30
+    totalRetentionInDays: 90
+    schema: {
+      name: 'UAVDatalink_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'ContainerName', type: 'string' }
+        { name: 'InterfaceName', type: 'string' }
+        { name: 'RxBytes', type: 'long' }
+        { name: 'RxPackets', type: 'long' }
+        { name: 'RxErrors', type: 'long' }
+        { name: 'RxDropped', type: 'long' }
+        { name: 'TxBytes', type: 'long' }
+        { name: 'TxPackets', type: 'long' }
+        { name: 'TxErrors', type: 'long' }
+        { name: 'TxDropped', type: 'long' }
+        { name: 'CpuUsagePct', type: 'real' }
+        { name: 'MemoryUsageBytes', type: 'long' }
+        { name: 'MemoryLimitBytes', type: 'long' }
+      ]
+    }
+  }
+}
+
+// ATCIS / MIMS C4I integration audit — operational picture changes that the
+// SOC + LangGraph agents correlate with UAV behaviour. METT+TC inputs flow
+// through this table.
+resource uavC4i 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVC4I_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 180
+    totalRetentionInDays: 365
+    schema: {
+      name: 'UAVC4I_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'OrderId', type: 'string' }
+        { name: 'Callsign', type: 'string' }
+        { name: 'OperationName', type: 'string' }
+        { name: 'Objective', type: 'string' }
+        { name: 'Roe', type: 'string' }
+        { name: 'AreaLat', type: 'real' }
+        { name: 'AreaLon', type: 'real' }
+        { name: 'AreaRadiusM', type: 'real' }
+        { name: 'TargetPriority', type: 'string' }
+        { name: 'IssuedBy', type: 'string' }
+        { name: 'TargetId', type: 'string' }
+        { name: 'Lat', type: 'real' }
+        { name: 'Lon', type: 'real' }
+        { name: 'AltM', type: 'real' }
+        { name: 'Classification', type: 'string' }
+        { name: 'ConfidencePct', type: 'int' }
+        { name: 'Source', type: 'string' }
+        { name: 'ReportedBy', type: 'string' }
+        { name: 'UnitCallsign', type: 'string' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
+// Cyber threat posture transitions (CT-3 / CT-2 / CT-1). Low-volume but
+// long-retention — primary input for OSCAL control evidence ("control
+// strength elevated because of CT-2 declaration").
+resource uavCyberPosture 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVCyberPosture_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 365
+    totalRetentionInDays: 730
+    schema: {
+      name: 'UAVCyberPosture_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'PreviousLevel', type: 'string' }
+        { name: 'Level', type: 'string' }
+        { name: 'ChangedBy', type: 'string' }
+        { name: 'Reason', type: 'string' }
+        { name: 'Source', type: 'string' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
 output tableName string = uavTelemetry.name
 output tableId string = uavTelemetry.id
 output pgseTableName string = uavPgse.name
@@ -305,3 +403,6 @@ output operatorTableId string = uavOperator.id
 output missionEventTableName string = uavMissionEvent.name
 output serviceAuditTableName string = uavServiceAudit.name
 output missionPlanTableName string = uavMissionPlan.name
+output datalinkTableName string = uavDatalink.name
+output c4iTableName string = uavC4i.name
+output cyberPostureTableName string = uavCyberPosture.name

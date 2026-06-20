@@ -38,6 +38,15 @@ param serviceAuditLogPath string = '/var/log/uav-sim-env/service-audit.ndjson'
 @description('MPS decision NDJSON file path on the VM (mps-stub output).')
 param mpsLogPath string = '/var/log/uav-sim-env/mps.ndjson'
 
+@description('Datalink stats NDJSON file path (datalink-stats sidecar).')
+param datalinkLogPath string = '/var/log/uav-sim-env/datalink-stats.ndjson'
+
+@description('C4I (ATCIS/MIMS) NDJSON file path (c4i-stub output).')
+param c4iLogPath string = '/var/log/uav-sim-env/c4i.ndjson'
+
+@description('Cyber posture NDJSON file path (cyber-posture-stub output).')
+param cyberPostureLogPath string = '/var/log/uav-sim-env/cyber-posture.ndjson'
+
 var dceName = '${namePrefix}-dce'
 var dcrName = '${namePrefix}-uav-dcr'
 var streamName = 'Custom-UAVTelemetry'
@@ -46,12 +55,18 @@ var operatorStreamName = 'Custom-UAVOperator'
 var missionStreamName = 'Custom-UAVMissionEvent'
 var serviceAuditStreamName = 'Custom-UAVServiceAudit'
 var mpsStreamName = 'Custom-UAVMissionPlan'
+var datalinkStreamName = 'Custom-UAVDatalink'
+var c4iStreamName = 'Custom-UAVC4I'
+var cyberPostureStreamName = 'Custom-UAVCyberPosture'
 var tableName = 'UAVTelemetry_CL'
 var pgseTableName = 'UAVPgse_CL'
 var operatorTableName = 'UAVOperator_CL'
 var missionTableName = 'UAVMissionEvent_CL'
 var serviceAuditTableName = 'UAVServiceAudit_CL'
 var mpsTableName = 'UAVMissionPlan_CL'
+var datalinkTableName = 'UAVDatalink_CL'
+var c4iTableName = 'UAVC4I_CL'
+var cyberPostureTableName = 'UAVCyberPosture_CL'
 
 resource law 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -231,6 +246,59 @@ var mpsStreamColumns = [
   { name: 'StatusCode', type: 'int' }
 ]
 
+var datalinkStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'ContainerName', type: 'string' }
+  { name: 'InterfaceName', type: 'string' }
+  { name: 'RxBytes', type: 'long' }
+  { name: 'RxPackets', type: 'long' }
+  { name: 'RxErrors', type: 'long' }
+  { name: 'RxDropped', type: 'long' }
+  { name: 'TxBytes', type: 'long' }
+  { name: 'TxPackets', type: 'long' }
+  { name: 'TxErrors', type: 'long' }
+  { name: 'TxDropped', type: 'long' }
+  { name: 'CpuUsagePct', type: 'real' }
+  { name: 'MemoryUsageBytes', type: 'long' }
+  { name: 'MemoryLimitBytes', type: 'long' }
+]
+
+var c4iStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'EventType', type: 'string' }
+  { name: 'OrderId', type: 'string' }
+  { name: 'Callsign', type: 'string' }
+  { name: 'OperationName', type: 'string' }
+  { name: 'Objective', type: 'string' }
+  { name: 'Roe', type: 'string' }
+  { name: 'AreaLat', type: 'real' }
+  { name: 'AreaLon', type: 'real' }
+  { name: 'AreaRadiusM', type: 'real' }
+  { name: 'TargetPriority', type: 'string' }
+  { name: 'IssuedBy', type: 'string' }
+  { name: 'TargetId', type: 'string' }
+  { name: 'Lat', type: 'real' }
+  { name: 'Lon', type: 'real' }
+  { name: 'AltM', type: 'real' }
+  { name: 'Classification', type: 'string' }
+  { name: 'ConfidencePct', type: 'int' }
+  { name: 'Source', type: 'string' }
+  { name: 'ReportedBy', type: 'string' }
+  { name: 'UnitCallsign', type: 'string' }
+  { name: 'StatusCode', type: 'int' }
+]
+
+var cyberPostureStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'EventType', type: 'string' }
+  { name: 'PreviousLevel', type: 'string' }
+  { name: 'Level', type: 'string' }
+  { name: 'ChangedBy', type: 'string' }
+  { name: 'Reason', type: 'string' }
+  { name: 'Source', type: 'string' }
+  { name: 'StatusCode', type: 'int' }
+]
+
 resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
   name: dcrName
   location: location
@@ -255,6 +323,15 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       }
       '${mpsStreamName}': {
         columns: mpsStreamColumns
+      }
+      '${datalinkStreamName}': {
+        columns: datalinkStreamColumns
+      }
+      '${c4iStreamName}': {
+        columns: c4iStreamColumns
+      }
+      '${cyberPostureStreamName}': {
+        columns: cyberPostureStreamColumns
       }
     }
     dataSources: {
@@ -293,6 +370,24 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
           name: 'uavMpsFile'
           streams: [ mpsStreamName ]
           filePatterns: [ mpsLogPath ]
+          format: 'json'
+        }
+        {
+          name: 'uavDatalinkFile'
+          streams: [ datalinkStreamName ]
+          filePatterns: [ datalinkLogPath ]
+          format: 'json'
+        }
+        {
+          name: 'uavC4iFile'
+          streams: [ c4iStreamName ]
+          filePatterns: [ c4iLogPath ]
+          format: 'json'
+        }
+        {
+          name: 'uavCyberPostureFile'
+          streams: [ cyberPostureStreamName ]
+          filePatterns: [ cyberPostureLogPath ]
           format: 'json'
         }
       ]
@@ -342,6 +437,24 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
         transformKql: 'source'
         outputStream: 'Custom-${mpsTableName}'
       }
+      {
+        streams: [ datalinkStreamName ]
+        destinations: [ 'centralLaw' ]
+        transformKql: 'source'
+        outputStream: 'Custom-${datalinkTableName}'
+      }
+      {
+        streams: [ c4iStreamName ]
+        destinations: [ 'centralLaw' ]
+        transformKql: 'source'
+        outputStream: 'Custom-${c4iTableName}'
+      }
+      {
+        streams: [ cyberPostureStreamName ]
+        destinations: [ 'centralLaw' ]
+        transformKql: 'source'
+        outputStream: 'Custom-${cyberPostureTableName}'
+      }
     ]
   }
 }
@@ -358,3 +471,6 @@ output operatorStreamName string = operatorStreamName
 output missionStreamName string = missionStreamName
 output serviceAuditStreamName string = serviceAuditStreamName
 output mpsStreamName string = mpsStreamName
+output datalinkStreamName string = datalinkStreamName
+output c4iStreamName string = c4iStreamName
+output cyberPostureStreamName string = cyberPostureStreamName

@@ -97,6 +97,52 @@ services:
       - "8100:8100"
     restart: unless-stopped
 
+  datalink-stats:
+    build:
+      context: ./datalink-stats
+    container_name: uav-datalink-stats
+    hostname: datalink-stats
+    environment:
+      TARGET_CONTAINER: "uav-datalink-los"
+      POLL_INTERVAL: "30"
+      LOG_FILE_PATH: "/var/log/uav-sim-env/datalink-stats.ndjson"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
+    restart: unless-stopped
+
+  c4i-stub:
+    build:
+      context: ./c4i-stub
+    container_name: uav-c4i-stub
+    hostname: c4i-stub
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.70
+    environment:
+      LOG_FILE_PATH: "/var/log/uav-sim-env/c4i.ndjson"
+    volumes:
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
+    ports:
+      - "8200:8200"
+    restart: unless-stopped
+
+  cyber-posture-stub:
+    build:
+      context: ./cyber-posture-stub
+    container_name: uav-cyber-posture-stub
+    hostname: cyber-posture-stub
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.80
+    environment:
+      LOG_FILE_PATH: "/var/log/uav-sim-env/cyber-posture.ndjson"
+    volumes:
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
+    ports:
+      - "8300:8300"
+    restart: unless-stopped
+
   pgse-stub:
     build:
       context: ./pgse-stub
