@@ -45,6 +45,7 @@ services:
     ports:
       - "14550:14550/udp"
       - "14552:14552/udp"
+      - "5790:5790/tcp"
     restart: unless-stopped
 
   telemetry-tap:
@@ -61,6 +62,23 @@ services:
       LISTEN_PORT: "14552"
     depends_on:
       - datalink-los
+    restart: unless-stopped
+
+  pgse-stub:
+    build:
+      context: ./pgse-stub
+    container_name: uav-pgse-stub
+    hostname: pgse-stub
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.50
+    environment:
+      APPROVED_DB: "/data/approved_firmware.json"
+      TOKEN_TTL_SEC: "300"
+    volumes:
+      - ./pgse-stub/data:/data:ro
+    ports:
+      - "8000:8000"
     restart: unless-stopped
 
   gcs-qgc:

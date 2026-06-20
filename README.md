@@ -102,14 +102,28 @@ nc -ul 14551 | xxd | head
 
 ---
 
-## 5. 시나리오 매핑 (Phase 1 가능 범위)
+## 5. 시나리오 환경 준비 매트릭스
 
-| 시나리오 | 진입점 | Phase 1 가능? |
-|---|---|---|
-| **S1 GNSS 스푸핑** → `uav_gps_spoof_residual.yml` | `av-mpd` `SIM_GPS_*` 파라미터 + GNSS-INS 잔차 산출 | ✅ |
-| **S3 SATCOM MITM** → `uav_satcom_integrity_fail.yml` | `datalink-los` BLOS 모드 (Phase 2) | ❌ |
-| **S4 펌웨어·공급망 변조** → `uav_fw_signature_mismatch.yml` | `pgse-stub` cosign 서명 검증 (Phase 2) | ❌ |
-| **A4 MAVLink 평문 인젝션** | `datalink-los` 14550 포트 직접 패킷 주입 | ✅ |
+본 환경은 **시나리오를 실행하는 것이 아니라 시나리오가 칠 수 있는 대상을 갖춰놓는** 것이 목적. 실제 공격 실행/탐지 룰 작성은 별도 트랙.
+
+| 시나리오 | 출력 룰 (`pollack-ai`) | 공격 대상 (이 repo) | 텔레메트리 진입점 | 환경 준비 |
+|---|---|---|---|---|
+| **S1 GNSS 스푸핑** | `uav_gps_spoof_residual.yml` | `av-mpd` SITL `SIM_GPS_*` 파라미터 (MAVLink `PARAM_SET` 통해 변조) | `telemetry-tap` `EKF_STATUS_REPORT.PosHorizVariance` / `VelocityVariance` | ✅ |
+| **S3 SATCOM MITM** | `uav_satcom_integrity_fail.yml` | BVLOS 링크 (Phase 2 — MPD는 LOS only) | — | ❌ Phase 2 |
+| **S4 펌웨어·공급망 변조** | `uav_fw_signature_mismatch.yml` | `pgse-stub` `/preflight/check`, `/armory/firmware/{id}`, `/launch/authorize` | pgse-stub 로그 + (Phase 2) NDJSON 통합 | ✅ |
+| **A4 MAVLink 평문 인젝션** | (TBD) | `datalink-los` TCP `:5790` (호스트 노출) → MAVProxy/pymavlink로 임의 패킷 주입 | `telemetry-tap` `COMMAND_LONG` / `STATUSTEXT` | ✅ |
+
+### 공격면 엔드포인트 표 (호스트에서 바로 접근)
+
+| 포트 | 프로토콜 | 서비스 | 용도 |
+|---|---|---|---|
+| `14550/udp` | MAVLink | datalink-los | QGC 자동 인식 채널 (관측/제어) |
+| `14552/udp` | MAVLink | telemetry-tap → datalink-los | tap 출력 (참고) |
+| `5790/tcp` | MAVLink | datalink-los | **A4 공격용 평문 MAVLink 채널** (mavlink-router server) |
+| `5760/tcp` | MAVLink | av-mpd | ArduPilot SITL 직접 접근 (디버깅용) |
+| `8000/tcp` | HTTP/REST | pgse-stub | **S4 공격용 PGSE REST API** (Swagger UI: `/docs`) |
+| `8080/tcp` | HTTP/noVNC | gcs-qgc | QGroundControl 브라우저 뷰 |
+| `5900/tcp` | VNC | gcs-qgc | QGC raw VNC |
 
 ---
 
@@ -147,23 +161,33 @@ AKS 이전은 멀티 UAV/스웜 (Phase 3) 단계에서.
 uav-sim-env/
 ├── README.md
 ├── docker-compose.yml
-├── av-mpd/
-│   ├── Dockerfile              # ArduPilot SITL + Gazebo Garden
+├── av-mpd/                      # AV (Air Vehicle)
+│   ├── Dockerfile               # ArduPilot SITL + Gazebo Garden
 │   ├── entrypoint.sh
 │   ├── persona/
-│   │   └── mpd_quadplane.parm  # MPD 페르소나 ArduPilot 파라미터
+│   │   └── mpd_quadplane.parm   # MPD 페르소나 ArduPilot 파라미터
 │   └── world/
-│       └── mpd_recon.sdf       # Gazebo 정찰 임무 월드 (Phase 1: 시각화만)
-├── datalink-los/
-│   ├── Dockerfile              # mavlink-router from source
+│       └── mpd_recon.sdf        # Gazebo 정찰 임무 월드
+├── datalink-los/                # Data Link + GDT
+│   ├── Dockerfile               # mavlink-router from source
 │   ├── mavlink-router.conf
-│   └── entrypoint.sh           # tc netem + mavlink-routerd
-└── gcs-qgc/
-    ├── Dockerfile              # QGC AppImage + Xvfb + noVNC
-    ├── supervisord.conf
-    ├── entrypoint.sh
-    └── missions/
-        └── mpd_recon.plan      # 정찰 임무 (waypoint 5)
+│   └── entrypoint.sh            # tc netem + mavlink-routerd
+├── gcs-qgc/                     # GCS (Ground Control Station)
+│   ├── Dockerfile               # QGC AppImage + Xvfb + noVNC
+│   ├── supervisord.conf
+│   ├── entrypoint.sh
+│   └── missions/
+│       └── mpd_recon.plan       # 정찰 임무 (VTOL 이착륙 + ROI 락온 + loiter)
+├── telemetry-tap/               # 관측층 (Phase 1a)
+│   ├── Dockerfile               # Python 3.11 + pymavlink
+│   ├── requirements.txt
+│   └── tap.py                   # MAVLink → NDJSON to stdout
+└── pgse-stub/                   # PGSE 디지털 면 (Phase 1b)
+    ├── Dockerfile               # FastAPI on uvicorn
+    ├── requirements.txt
+    ├── app.py                   # /armory/firmware, /preflight/check, /launch/authorize
+    └── data/
+        └── approved_firmware.json
 ```
 
 ---
@@ -184,9 +208,9 @@ uav-sim-env/
 |---|---|---|
 | 0 | 단일 MPD MVP (av-mpd + datalink-los + gcs-qgc) | ✅ 완료 |
 | 1a | telemetry-tap (MAVLink → NDJSON, Sentinel ingest 준비) | ✅ 완료 |
-| 1b | GNSS 스푸핑 모듈 (S1 시나리오) | — |
-| 1c | pgse-stub (S4 시나리오) | — |
-| 2 | KCD-200 추가 + SATCOM stub (S3) + BVLOS 모드 | — |
+| 1b | pgse-stub (S4 attack surface) + 5790 노출 (A4) | ✅ 완료 |
+| 1c | Azure Monitor Agent + Log Analytics 워크스페이스 ingest | — |
+| 2 | KCD-200 추가 + SATCOM stub (S3 BVLOS) | — |
 | 3 | MPUH MUM-T + 군집자폭 inter-drone mesh + AKS 이전 | — |
 
 ---
