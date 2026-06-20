@@ -1,0 +1,344 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.44.1.10279",
+      "templateHash": "3459308409702794810"
+    }
+  },
+  "parameters": {
+    "workspaceName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Log Analytics workspace this table lives in."
+      }
+    },
+    "retentionInDays": {
+      "type": "int",
+      "defaultValue": 30,
+      "minValue": 4,
+      "maxValue": 730,
+      "metadata": {
+        "description": "Days the rows in this table are kept before deletion."
+      }
+    },
+    "totalRetentionInDays": {
+      "type": "int",
+      "defaultValue": 90,
+      "minValue": 4,
+      "maxValue": 2555,
+      "metadata": {
+        "description": "Total days the row is retained including the lower-cost Archive tier. Must be >= retentionInDays."
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/tables",
+      "apiVersion": "2023-09-01",
+      "name": "[format('{0}/{1}', parameters('workspaceName'), 'UAVTelemetry_CL')]",
+      "properties": {
+        "plan": "Analytics",
+        "retentionInDays": "[parameters('retentionInDays')]",
+        "totalRetentionInDays": "[parameters('totalRetentionInDays')]",
+        "schema": {
+          "name": "UAVTelemetry_CL",
+          "columns": [
+            {
+              "name": "TimeGenerated",
+              "type": "datetime"
+            },
+            {
+              "name": "UAVId",
+              "type": "string"
+            },
+            {
+              "name": "MsgType",
+              "type": "string"
+            },
+            {
+              "name": "SystemId",
+              "type": "int"
+            },
+            {
+              "name": "ComponentId",
+              "type": "int"
+            },
+            {
+              "name": "Lat",
+              "type": "real"
+            },
+            {
+              "name": "Lon",
+              "type": "real"
+            },
+            {
+              "name": "AltMSL_m",
+              "type": "real"
+            },
+            {
+              "name": "AltRel_m",
+              "type": "real"
+            },
+            {
+              "name": "VxNorth_cms",
+              "type": "int"
+            },
+            {
+              "name": "VyEast_cms",
+              "type": "int"
+            },
+            {
+              "name": "VzDown_cms",
+              "type": "int"
+            },
+            {
+              "name": "Heading_cdeg",
+              "type": "int"
+            },
+            {
+              "name": "X_m",
+              "type": "real"
+            },
+            {
+              "name": "Y_m",
+              "type": "real"
+            },
+            {
+              "name": "Z_m",
+              "type": "real"
+            },
+            {
+              "name": "Vx_ms",
+              "type": "real"
+            },
+            {
+              "name": "Vy_ms",
+              "type": "real"
+            },
+            {
+              "name": "Vz_ms",
+              "type": "real"
+            },
+            {
+              "name": "FixType",
+              "type": "int"
+            },
+            {
+              "name": "SatellitesVisible",
+              "type": "int"
+            },
+            {
+              "name": "Eph_cm",
+              "type": "int"
+            },
+            {
+              "name": "Epv_cm",
+              "type": "int"
+            },
+            {
+              "name": "VelGround_cms",
+              "type": "int"
+            },
+            {
+              "name": "CourseOverGround_cdeg",
+              "type": "int"
+            },
+            {
+              "name": "Roll_rad",
+              "type": "real"
+            },
+            {
+              "name": "Pitch_rad",
+              "type": "real"
+            },
+            {
+              "name": "Yaw_rad",
+              "type": "real"
+            },
+            {
+              "name": "RollSpeed_rads",
+              "type": "real"
+            },
+            {
+              "name": "PitchSpeed_rads",
+              "type": "real"
+            },
+            {
+              "name": "YawSpeed_rads",
+              "type": "real"
+            },
+            {
+              "name": "Airspeed_ms",
+              "type": "real"
+            },
+            {
+              "name": "Groundspeed_ms",
+              "type": "real"
+            },
+            {
+              "name": "Heading_deg",
+              "type": "int"
+            },
+            {
+              "name": "Throttle_pct",
+              "type": "int"
+            },
+            {
+              "name": "ClimbRate_ms",
+              "type": "real"
+            },
+            {
+              "name": "EkfFlags",
+              "type": "int"
+            },
+            {
+              "name": "VelocityVariance",
+              "type": "real"
+            },
+            {
+              "name": "PosHorizVariance",
+              "type": "real"
+            },
+            {
+              "name": "PosVertVariance",
+              "type": "real"
+            },
+            {
+              "name": "CompassVariance",
+              "type": "real"
+            },
+            {
+              "name": "TerrainAltVariance",
+              "type": "real"
+            },
+            {
+              "name": "BatteryVoltage_mV",
+              "type": "int"
+            },
+            {
+              "name": "BatteryCurrent_cA",
+              "type": "int"
+            },
+            {
+              "name": "BatteryRemaining_pct",
+              "type": "int"
+            },
+            {
+              "name": "OnboardCpuLoad_pct",
+              "type": "real"
+            },
+            {
+              "name": "ErrorsComm",
+              "type": "int"
+            },
+            {
+              "name": "DropRateComm_pct",
+              "type": "real"
+            },
+            {
+              "name": "VibrationX",
+              "type": "real"
+            },
+            {
+              "name": "VibrationY",
+              "type": "real"
+            },
+            {
+              "name": "VibrationZ",
+              "type": "real"
+            },
+            {
+              "name": "Clipping0",
+              "type": "int"
+            },
+            {
+              "name": "Clipping1",
+              "type": "int"
+            },
+            {
+              "name": "Clipping2",
+              "type": "int"
+            },
+            {
+              "name": "Command",
+              "type": "int"
+            },
+            {
+              "name": "Confirmation",
+              "type": "int"
+            },
+            {
+              "name": "Param1",
+              "type": "real"
+            },
+            {
+              "name": "Param2",
+              "type": "real"
+            },
+            {
+              "name": "Param3",
+              "type": "real"
+            },
+            {
+              "name": "Param4",
+              "type": "real"
+            },
+            {
+              "name": "TargetSystem",
+              "type": "int"
+            },
+            {
+              "name": "TargetComponent",
+              "type": "int"
+            },
+            {
+              "name": "Result",
+              "type": "int"
+            },
+            {
+              "name": "Seq",
+              "type": "int"
+            },
+            {
+              "name": "SystemStatus",
+              "type": "int"
+            },
+            {
+              "name": "BaseMode",
+              "type": "int"
+            },
+            {
+              "name": "CustomMode",
+              "type": "int"
+            },
+            {
+              "name": "MavlinkVersion",
+              "type": "int"
+            },
+            {
+              "name": "Severity",
+              "type": "int"
+            },
+            {
+              "name": "Text",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "tableName": {
+      "type": "string",
+      "value": "UAVTelemetry_CL"
+    },
+    "tableId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.OperationalInsights/workspaces/tables', parameters('workspaceName'), 'UAVTelemetry_CL')]"
+    }
+  }
+}

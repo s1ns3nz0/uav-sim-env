@@ -24,6 +24,10 @@ UAV_ID: str = os.environ.get("UAV_ID", "MPD-001")
 LISTEN_HOST: str = os.environ.get("LISTEN_HOST", "0.0.0.0")
 LISTEN_PORT: int = int(os.environ.get("LISTEN_PORT", "14552"))
 
+# Optional file sink for Azure Monitor Agent / Fluent Bit tail consumption.
+# If set, every NDJSON record is also appended to this file (one JSON per line).
+LOG_FILE_PATH: str = os.environ.get("LOG_FILE_PATH", "")
+
 # Messages worth forwarding to the SOC pipeline. Anything else is dropped to
 # keep ingest volume bounded.
 FORWARDED_MSG_TYPES: frozenset[str] = frozenset({
@@ -62,10 +66,17 @@ def _log(line: str) -> None:
     sys.stderr.flush()
 
 
+_log_file_handle = None
+
+
 def _emit(record: dict[str, Any]) -> None:
-    """Serialize a record as a single-line JSON document on stdout."""
-    sys.stdout.write(json.dumps(record, separators=(",", ":"), default=str) + "\n")
+    """Serialize a record as a single-line JSON document on stdout (and file sink)."""
+    line = json.dumps(record, separators=(",", ":"), default=str) + "\n"
+    sys.stdout.write(line)
     sys.stdout.flush()
+    if _log_file_handle is not None:
+        _log_file_handle.write(line)
+        _log_file_handle.flush()
 
 
 def _record_for(msg: Any) -> dict[str, Any]:
@@ -218,6 +229,12 @@ def _record_for(msg: Any) -> dict[str, Any]:
 
 def main() -> None:
     """Run the UDP subscriber loop and emit NDJSON to stdout."""
+    global _log_file_handle
+    if LOG_FILE_PATH:
+        os.makedirs(os.path.dirname(LOG_FILE_PATH) or ".", exist_ok=True)
+        _log_file_handle = open(LOG_FILE_PATH, "a", encoding="utf-8")
+        _log(f"file sink active: {LOG_FILE_PATH}")
+
     conn_str = f"udpin:{LISTEN_HOST}:{LISTEN_PORT}"
     _log(f"binding {conn_str}, UAVId={UAV_ID}")
     conn = mavutil.mavlink_connection(conn_str, source_system=254)

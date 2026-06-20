@@ -1,0 +1,424 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.44.1.10279",
+      "templateHash": "13927506726193564743"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "koreacentral",
+      "metadata": {
+        "description": "Azure region. Must match the workspace and the VM."
+      }
+    },
+    "workspaceName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the existing Log Analytics workspace (output of data.bicep)."
+      }
+    },
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "dah-data",
+      "metadata": {
+        "description": "Name prefix for the DCE / DCR resources."
+      }
+    },
+    "logFilePath": {
+      "type": "string",
+      "defaultValue": "/var/log/uav-sim-env/telemetry.ndjson",
+      "metadata": {
+        "description": "Custom log file path on the VM that AMA will tail."
+      }
+    }
+  },
+  "variables": {
+    "dceName": "[format('{0}-dce', parameters('namePrefix'))]",
+    "dcrName": "[format('{0}-uav-dcr', parameters('namePrefix'))]",
+    "streamName": "Custom-UAVTelemetry",
+    "tableName": "UAVTelemetry_CL",
+    "streamColumns": [
+      {
+        "name": "TimeGenerated",
+        "type": "datetime"
+      },
+      {
+        "name": "UAVId",
+        "type": "string"
+      },
+      {
+        "name": "MsgType",
+        "type": "string"
+      },
+      {
+        "name": "SystemId",
+        "type": "int"
+      },
+      {
+        "name": "ComponentId",
+        "type": "int"
+      },
+      {
+        "name": "Lat",
+        "type": "real"
+      },
+      {
+        "name": "Lon",
+        "type": "real"
+      },
+      {
+        "name": "AltMSL_m",
+        "type": "real"
+      },
+      {
+        "name": "AltRel_m",
+        "type": "real"
+      },
+      {
+        "name": "VxNorth_cms",
+        "type": "int"
+      },
+      {
+        "name": "VyEast_cms",
+        "type": "int"
+      },
+      {
+        "name": "VzDown_cms",
+        "type": "int"
+      },
+      {
+        "name": "Heading_cdeg",
+        "type": "int"
+      },
+      {
+        "name": "X_m",
+        "type": "real"
+      },
+      {
+        "name": "Y_m",
+        "type": "real"
+      },
+      {
+        "name": "Z_m",
+        "type": "real"
+      },
+      {
+        "name": "Vx_ms",
+        "type": "real"
+      },
+      {
+        "name": "Vy_ms",
+        "type": "real"
+      },
+      {
+        "name": "Vz_ms",
+        "type": "real"
+      },
+      {
+        "name": "FixType",
+        "type": "int"
+      },
+      {
+        "name": "SatellitesVisible",
+        "type": "int"
+      },
+      {
+        "name": "Eph_cm",
+        "type": "int"
+      },
+      {
+        "name": "Epv_cm",
+        "type": "int"
+      },
+      {
+        "name": "VelGround_cms",
+        "type": "int"
+      },
+      {
+        "name": "CourseOverGround_cdeg",
+        "type": "int"
+      },
+      {
+        "name": "Roll_rad",
+        "type": "real"
+      },
+      {
+        "name": "Pitch_rad",
+        "type": "real"
+      },
+      {
+        "name": "Yaw_rad",
+        "type": "real"
+      },
+      {
+        "name": "RollSpeed_rads",
+        "type": "real"
+      },
+      {
+        "name": "PitchSpeed_rads",
+        "type": "real"
+      },
+      {
+        "name": "YawSpeed_rads",
+        "type": "real"
+      },
+      {
+        "name": "Airspeed_ms",
+        "type": "real"
+      },
+      {
+        "name": "Groundspeed_ms",
+        "type": "real"
+      },
+      {
+        "name": "Heading_deg",
+        "type": "int"
+      },
+      {
+        "name": "Throttle_pct",
+        "type": "int"
+      },
+      {
+        "name": "ClimbRate_ms",
+        "type": "real"
+      },
+      {
+        "name": "EkfFlags",
+        "type": "int"
+      },
+      {
+        "name": "VelocityVariance",
+        "type": "real"
+      },
+      {
+        "name": "PosHorizVariance",
+        "type": "real"
+      },
+      {
+        "name": "PosVertVariance",
+        "type": "real"
+      },
+      {
+        "name": "CompassVariance",
+        "type": "real"
+      },
+      {
+        "name": "TerrainAltVariance",
+        "type": "real"
+      },
+      {
+        "name": "BatteryVoltage_mV",
+        "type": "int"
+      },
+      {
+        "name": "BatteryCurrent_cA",
+        "type": "int"
+      },
+      {
+        "name": "BatteryRemaining_pct",
+        "type": "int"
+      },
+      {
+        "name": "OnboardCpuLoad_pct",
+        "type": "real"
+      },
+      {
+        "name": "ErrorsComm",
+        "type": "int"
+      },
+      {
+        "name": "DropRateComm_pct",
+        "type": "real"
+      },
+      {
+        "name": "VibrationX",
+        "type": "real"
+      },
+      {
+        "name": "VibrationY",
+        "type": "real"
+      },
+      {
+        "name": "VibrationZ",
+        "type": "real"
+      },
+      {
+        "name": "Clipping0",
+        "type": "int"
+      },
+      {
+        "name": "Clipping1",
+        "type": "int"
+      },
+      {
+        "name": "Clipping2",
+        "type": "int"
+      },
+      {
+        "name": "Command",
+        "type": "int"
+      },
+      {
+        "name": "Confirmation",
+        "type": "int"
+      },
+      {
+        "name": "Param1",
+        "type": "real"
+      },
+      {
+        "name": "Param2",
+        "type": "real"
+      },
+      {
+        "name": "Param3",
+        "type": "real"
+      },
+      {
+        "name": "Param4",
+        "type": "real"
+      },
+      {
+        "name": "TargetSystem",
+        "type": "int"
+      },
+      {
+        "name": "TargetComponent",
+        "type": "int"
+      },
+      {
+        "name": "Result",
+        "type": "int"
+      },
+      {
+        "name": "Seq",
+        "type": "int"
+      },
+      {
+        "name": "SystemStatus",
+        "type": "int"
+      },
+      {
+        "name": "BaseMode",
+        "type": "int"
+      },
+      {
+        "name": "CustomMode",
+        "type": "int"
+      },
+      {
+        "name": "MavlinkVersion",
+        "type": "int"
+      },
+      {
+        "name": "Severity",
+        "type": "int"
+      },
+      {
+        "name": "Text",
+        "type": "string"
+      }
+    ]
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/dataCollectionEndpoints",
+      "apiVersion": "2023-03-11",
+      "name": "[variables('dceName')]",
+      "location": "[parameters('location')]",
+      "kind": "Linux",
+      "properties": {
+        "networkAcls": {
+          "publicNetworkAccess": "Enabled"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/dataCollectionRules",
+      "apiVersion": "2023-03-11",
+      "name": "[variables('dcrName')]",
+      "location": "[parameters('location')]",
+      "kind": "Linux",
+      "properties": {
+        "dataCollectionEndpointId": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName'))]",
+        "streamDeclarations": {
+          "[format('{0}', variables('streamName'))]": {
+            "columns": "[variables('streamColumns')]"
+          }
+        },
+        "dataSources": {
+          "logFiles": [
+            {
+              "name": "uavTelemetryFile",
+              "streams": [
+                "[variables('streamName')]"
+              ],
+              "filePatterns": [
+                "[parameters('logFilePath')]"
+              ],
+              "format": "json"
+            }
+          ]
+        },
+        "destinations": {
+          "logAnalytics": [
+            {
+              "name": "centralLaw",
+              "workspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]"
+            }
+          ]
+        },
+        "dataFlows": [
+          {
+            "streams": [
+              "[variables('streamName')]"
+            ],
+            "destinations": [
+              "centralLaw"
+            ],
+            "transformKql": "source",
+            "outputStream": "[format('Custom-{0}', variables('tableName'))]"
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "dceName": {
+      "type": "string",
+      "value": "[variables('dceName')]"
+    },
+    "dceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName'))]"
+    },
+    "dceIngestEndpoint": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/dataCollectionEndpoints', variables('dceName')), '2023-03-11').logsIngestion.endpoint]"
+    },
+    "dcrName": {
+      "type": "string",
+      "value": "[variables('dcrName')]"
+    },
+    "dcrId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/dataCollectionRules', variables('dcrName'))]"
+    },
+    "dcrImmutableId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', variables('dcrName')), '2023-03-11').immutableId]"
+    },
+    "streamName": {
+      "type": "string",
+      "value": "[variables('streamName')]"
+    }
+  }
+}

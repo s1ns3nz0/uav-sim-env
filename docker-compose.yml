@@ -60,6 +60,9 @@ services:
       UAV_ID: "MPD-001"
       LISTEN_HOST: "0.0.0.0"
       LISTEN_PORT: "14552"
+      LOG_FILE_PATH: "/var/log/uav-sim-env/telemetry.ndjson"
+    volumes:
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
     depends_on:
       - datalink-los
     restart: unless-stopped
