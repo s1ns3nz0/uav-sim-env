@@ -107,7 +107,11 @@ def _project_resource(name: str, stats: dict[str, Any]) -> dict[str, Any]:
 
 
 def _parse_ss_lines(text: str) -> Iterable[dict[str, Any]]:
-    """Parse `ss -tn -H` output. Columns: State Recv-Q Send-Q Local Peer ..."""
+    """Parse `ss -tn -H` output. Columns: State Recv-Q Send-Q Local Peer ...
+
+    Connection counted if EITHER local OR peer port is in CONN_PORTS — captures
+    both inbound (local port = listener) and outbound (peer port = listener).
+    """
     for raw in text.splitlines():
         parts = raw.split()
         if len(parts) < 5:
@@ -115,11 +119,10 @@ def _parse_ss_lines(text: str) -> Iterable[dict[str, Any]]:
         state, _recvq, _sendq, local, peer = parts[0], parts[1], parts[2], parts[3], parts[4]
         if ":" not in local or ":" not in peer:
             continue
-        local_port = local.rsplit(":", 1)[1]
-        if CONN_PORTS and local_port not in CONN_PORTS:
-            continue
-        local_ip = local.rsplit(":", 1)[0]
+        local_ip, local_port = local.rsplit(":", 1)
         peer_ip, peer_port = peer.rsplit(":", 1)
+        if CONN_PORTS and local_port not in CONN_PORTS and peer_port not in CONN_PORTS:
+            continue
         yield {
             "TimeGenerated": _now_iso(),
             "State": state,
@@ -162,18 +165,25 @@ def main() -> int:
         except Exception as exc:  # noqa: BLE001
             _log(f"datalink poll error: {exc}")
 
-        # 2) resource metrics for every project container
+        # 2) resource metrics for every project container.
+        # Iterating the list yields docker SDK Container objects that lazily
+        # 404 if a container was removed between list and inspect — guard each
+        # entry so one transient peer death doesn't skip the rest of the cycle.
+        containers: list[Any] = []
         try:
-            for container in client.containers.list(
+            containers = client.containers.list(
                 filters={"label": f"com.docker.compose.project={PROJECT_LABEL_FILTER}"}
-            ):
-                try:
-                    cstats = container.stats(stream=False)
-                    _emit(resource_handle, _project_resource(container.name, cstats))
-                except Exception as exc:  # noqa: BLE001
-                    _log(f"resource poll error for {container.name}: {exc}")
+            )
         except Exception as exc:  # noqa: BLE001
             _log(f"container list error: {exc}")
+        for container in containers:
+            try:
+                cstats = container.stats(stream=False)
+                _emit(resource_handle, _project_resource(container.name, cstats))
+            except docker.errors.NotFound:
+                _log(f"container disappeared mid-poll: {getattr(container, 'name', '?')}")
+            except Exception as exc:  # noqa: BLE001
+                _log(f"resource poll error for {getattr(container, 'name', '?')}: {exc}")
 
         # 3) connection snapshot via docker exec ss inside the datalink container
         try:
