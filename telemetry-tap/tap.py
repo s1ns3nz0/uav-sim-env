@@ -33,6 +33,11 @@ LOG_FILE_PATH: str = os.environ.get("LOG_FILE_PATH", "")
 # insider-threat rules.
 OPERATOR_FILE_PATH: str = os.environ.get("OPERATOR_FILE_PATH", "")
 
+# Optional tertiary sink — high-level mission lifecycle events derived from the
+# raw stream (takeoff_initiated, waypoint_reached, roi_set, land_initiated...).
+# Feeds UAVMissionEvent_CL for timeline rules and after-action review.
+MISSION_FILE_PATH: str = os.environ.get("MISSION_FILE_PATH", "")
+
 # MAVLink message types that represent operator-initiated control actions.
 OPERATOR_MSG_TYPES: frozenset[str] = frozenset({
     "COMMAND_LONG",
@@ -95,6 +100,12 @@ def _log(line: str) -> None:
 
 _log_file_handle = None
 _operator_file_handle = None
+_mission_file_handle = None
+
+# Stateful trackers used to derive named mission events from the message stream.
+_last_mode: int | None = None
+_last_mission_seq: int | None = None
+_last_position: dict[str, float | None] = {"Lat": None, "Lon": None, "AltMSL_m": None}
 
 
 def _derive_action(record: dict[str, Any]) -> str:
@@ -117,6 +128,76 @@ def _derive_action(record: dict[str, Any]) -> str:
     return msg_type.lower()
 
 
+def _emit_mission_event(event_name: str, record: dict[str, Any], **extras: Any) -> None:
+    """Append a named mission lifecycle event to the mission sink."""
+    if _mission_file_handle is None:
+        return
+    payload = {
+        "TimeGenerated": record.get("TimeGenerated"),
+        "UAVId": record.get("UAVId"),
+        "EventName": event_name,
+        "MsgType": record.get("MsgType"),
+        "Command": record.get("Command"),
+        "Seq": record.get("Seq"),
+        "Lat": _last_position["Lat"],
+        "Lon": _last_position["Lon"],
+        "AltMSL_m": _last_position["AltMSL_m"],
+        **extras,
+    }
+    _mission_file_handle.write(json.dumps(payload, separators=(",", ":"), default=str) + "\n")
+    _mission_file_handle.flush()
+
+
+def _maybe_derive_mission_events(record: dict[str, Any]) -> None:
+    """Update stateful trackers and emit named mission events when triggers fire."""
+    global _last_mode, _last_mission_seq
+
+    msg_type = record.get("MsgType")
+
+    # Update last-known position from telemetry — used to attach geo to events.
+    if msg_type == "GLOBAL_POSITION_INT":
+        _last_position["Lat"] = record.get("Lat")
+        _last_position["Lon"] = record.get("Lon")
+        _last_position["AltMSL_m"] = record.get("AltMSL_m")
+        return
+
+    if _mission_file_handle is None:
+        return
+
+    if msg_type == "HEARTBEAT":
+        current_mode = record.get("CustomMode")
+        if isinstance(current_mode, int) and current_mode != _last_mode:
+            _emit_mission_event(
+                "mode_change",
+                record,
+                CustomModeBefore=_last_mode,
+                CustomModeAfter=current_mode,
+            )
+            _last_mode = current_mode
+        return
+
+    if msg_type == "MISSION_CURRENT":
+        seq = record.get("Seq")
+        if isinstance(seq, int) and seq != _last_mission_seq:
+            if seq == 0 and _last_mission_seq is not None and _last_mission_seq > 0:
+                _emit_mission_event("mission_reset", record)
+            elif _last_mission_seq is None or seq > (_last_mission_seq or 0):
+                _emit_mission_event("mission_seq_advanced", record)
+            _last_mission_seq = seq
+        return
+
+    if msg_type == "MISSION_ITEM_REACHED":
+        _emit_mission_event("waypoint_reached", record)
+        return
+
+    if msg_type == "COMMAND_LONG":
+        command = record.get("Command")
+        named = _MAV_CMD_ACTION.get(command if isinstance(command, int) else -1)
+        if named is None:
+            return
+        _emit_mission_event(named, record)
+
+
 def _emit(record: dict[str, Any]) -> None:
     """Serialize a record as a single-line JSON document on stdout (and file sinks)."""
     line = json.dumps(record, separators=(",", ":"), default=str) + "\n"
@@ -125,6 +206,7 @@ def _emit(record: dict[str, Any]) -> None:
     if _log_file_handle is not None:
         _log_file_handle.write(line)
         _log_file_handle.flush()
+    _maybe_derive_mission_events(record)
     if _operator_file_handle is not None and record.get("MsgType") in OPERATOR_MSG_TYPES:
         op_record = {
             "TimeGenerated": record.get("TimeGenerated"),
@@ -299,7 +381,7 @@ def _record_for(msg: Any) -> dict[str, Any]:
 
 def main() -> None:
     """Run the UDP subscriber loop and emit NDJSON to stdout."""
-    global _log_file_handle, _operator_file_handle
+    global _log_file_handle, _operator_file_handle, _mission_file_handle
     if LOG_FILE_PATH:
         os.makedirs(os.path.dirname(LOG_FILE_PATH) or ".", exist_ok=True)
         _log_file_handle = open(LOG_FILE_PATH, "a", encoding="utf-8")
@@ -308,6 +390,10 @@ def main() -> None:
         os.makedirs(os.path.dirname(OPERATOR_FILE_PATH) or ".", exist_ok=True)
         _operator_file_handle = open(OPERATOR_FILE_PATH, "a", encoding="utf-8")
         _log(f"operator sink active: {OPERATOR_FILE_PATH}")
+    if MISSION_FILE_PATH:
+        os.makedirs(os.path.dirname(MISSION_FILE_PATH) or ".", exist_ok=True)
+        _mission_file_handle = open(MISSION_FILE_PATH, "a", encoding="utf-8")
+        _log(f"mission sink active: {MISSION_FILE_PATH}")
 
     conn_str = f"udpin:{LISTEN_HOST}:{LISTEN_PORT}"
     _log(f"binding {conn_str}, UAVId={UAV_ID}")

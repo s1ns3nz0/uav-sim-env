@@ -207,9 +207,101 @@ resource uavOperator 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01
   }
 }
 
+// Mission-lifecycle events derived in tap.py (takeoff, waypoint_reached,
+// mode_change, roi_set, land, rtl, ...). Carries the geo at the time of the
+// event so timelines can be plotted without joining back to UAVTelemetry.
+resource uavMissionEvent 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVMissionEvent_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVMissionEvent_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'EventName', type: 'string' }
+        { name: 'MsgType', type: 'string' }
+        { name: 'Command', type: 'int' }
+        { name: 'Seq', type: 'int' }
+        { name: 'Lat', type: 'real' }
+        { name: 'Lon', type: 'real' }
+        { name: 'AltMSL_m', type: 'real' }
+        { name: 'CustomModeBefore', type: 'int' }
+        { name: 'CustomModeAfter', type: 'int' }
+      ]
+    }
+  }
+}
+
+// Docker engine event audit. Container lifecycle for the SOC ops surface
+// ("av-mpd died during mission", "unexpected image pulled").
+resource uavServiceAudit 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVServiceAudit_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 30
+    totalRetentionInDays: 90
+    schema: {
+      name: 'UAVServiceAudit_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'Action', type: 'string' }
+        { name: 'ActorId', type: 'string' }
+        { name: 'ContainerName', type: 'string' }
+        { name: 'ImageName', type: 'string' }
+        { name: 'ExitCode', type: 'string' }
+        { name: 'Signal', type: 'string' }
+        { name: 'ServiceLabel', type: 'string' }
+        { name: 'ProjectLabel', type: 'string' }
+        { name: 'Scope', type: 'string' }
+      ]
+    }
+  }
+}
+
+// MPS audit table — primary OSCAL evidence source (who planned, who approved,
+// who released). Retention deliberately long for after-action investigations.
+resource uavMissionPlan 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVMissionPlan_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 180
+    totalRetentionInDays: 730
+    schema: {
+      name: 'UAVMissionPlan_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'PlanId', type: 'string' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'Planner', type: 'string' }
+        { name: 'Approver', type: 'string' }
+        { name: 'ReleasedBy', type: 'string' }
+        { name: 'Callsign', type: 'string' }
+        { name: 'Roe', type: 'string' }
+        { name: 'PayloadConfig', type: 'string' }
+        { name: 'WaypointCount', type: 'int' }
+        { name: 'Status', type: 'string' }
+        { name: 'Comment', type: 'string' }
+        { name: 'FailReason', type: 'string' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
 output tableName string = uavTelemetry.name
 output tableId string = uavTelemetry.id
 output pgseTableName string = uavPgse.name
 output pgseTableId string = uavPgse.id
 output operatorTableName string = uavOperator.name
 output operatorTableId string = uavOperator.id
+output missionEventTableName string = uavMissionEvent.name
+output serviceAuditTableName string = uavServiceAudit.name
+output missionPlanTableName string = uavMissionPlan.name

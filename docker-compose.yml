@@ -62,10 +62,39 @@ services:
       LISTEN_PORT: "14552"
       LOG_FILE_PATH: "/var/log/uav-sim-env/telemetry.ndjson"
       OPERATOR_FILE_PATH: "/var/log/uav-sim-env/operator.ndjson"
+      MISSION_FILE_PATH: "/var/log/uav-sim-env/mission.ndjson"
     volumes:
       - /var/log/uav-sim-env:/var/log/uav-sim-env
     depends_on:
       - datalink-los
+    restart: unless-stopped
+
+  service-audit:
+    build:
+      context: ./service-audit
+    container_name: uav-service-audit
+    hostname: service-audit
+    environment:
+      LOG_FILE_PATH: "/var/log/uav-sim-env/service-audit.ndjson"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
+    restart: unless-stopped
+
+  mps-stub:
+    build:
+      context: ./mps-stub
+    container_name: uav-mps-stub
+    hostname: mps-stub
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.60
+    environment:
+      LOG_FILE_PATH: "/var/log/uav-sim-env/mps.ndjson"
+    volumes:
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
+    ports:
+      - "8100:8100"
     restart: unless-stopped
 
   pgse-stub:

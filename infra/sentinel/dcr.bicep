@@ -29,14 +29,29 @@ param pgseLogPath string = '/var/log/uav-sim-env/pgse.ndjson'
 @description('Operator event NDJSON file path on the VM (telemetry-tap operator filter).')
 param operatorLogPath string = '/var/log/uav-sim-env/operator.ndjson'
 
+@description('Mission lifecycle event NDJSON file path on the VM (telemetry-tap mission filter).')
+param missionLogPath string = '/var/log/uav-sim-env/mission.ndjson'
+
+@description('Docker engine event NDJSON file path on the VM (service-audit sidecar).')
+param serviceAuditLogPath string = '/var/log/uav-sim-env/service-audit.ndjson'
+
+@description('MPS decision NDJSON file path on the VM (mps-stub output).')
+param mpsLogPath string = '/var/log/uav-sim-env/mps.ndjson'
+
 var dceName = '${namePrefix}-dce'
 var dcrName = '${namePrefix}-uav-dcr'
 var streamName = 'Custom-UAVTelemetry'
 var pgseStreamName = 'Custom-UAVPgse'
 var operatorStreamName = 'Custom-UAVOperator'
+var missionStreamName = 'Custom-UAVMissionEvent'
+var serviceAuditStreamName = 'Custom-UAVServiceAudit'
+var mpsStreamName = 'Custom-UAVMissionPlan'
 var tableName = 'UAVTelemetry_CL'
 var pgseTableName = 'UAVPgse_CL'
 var operatorTableName = 'UAVOperator_CL'
+var missionTableName = 'UAVMissionEvent_CL'
+var serviceAuditTableName = 'UAVServiceAudit_CL'
+var mpsTableName = 'UAVMissionPlan_CL'
 
 resource law 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -170,6 +185,52 @@ var operatorStreamColumns = [
   { name: 'Seq', type: 'int' }
 ]
 
+var missionStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'UAVId', type: 'string' }
+  { name: 'EventName', type: 'string' }
+  { name: 'MsgType', type: 'string' }
+  { name: 'Command', type: 'int' }
+  { name: 'Seq', type: 'int' }
+  { name: 'Lat', type: 'real' }
+  { name: 'Lon', type: 'real' }
+  { name: 'AltMSL_m', type: 'real' }
+  { name: 'CustomModeBefore', type: 'int' }
+  { name: 'CustomModeAfter', type: 'int' }
+]
+
+var serviceAuditStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'EventType', type: 'string' }
+  { name: 'Action', type: 'string' }
+  { name: 'ActorId', type: 'string' }
+  { name: 'ContainerName', type: 'string' }
+  { name: 'ImageName', type: 'string' }
+  { name: 'ExitCode', type: 'string' }
+  { name: 'Signal', type: 'string' }
+  { name: 'ServiceLabel', type: 'string' }
+  { name: 'ProjectLabel', type: 'string' }
+  { name: 'Scope', type: 'string' }
+]
+
+var mpsStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'EventType', type: 'string' }
+  { name: 'PlanId', type: 'string' }
+  { name: 'UAVId', type: 'string' }
+  { name: 'Planner', type: 'string' }
+  { name: 'Approver', type: 'string' }
+  { name: 'ReleasedBy', type: 'string' }
+  { name: 'Callsign', type: 'string' }
+  { name: 'Roe', type: 'string' }
+  { name: 'PayloadConfig', type: 'string' }
+  { name: 'WaypointCount', type: 'int' }
+  { name: 'Status', type: 'string' }
+  { name: 'Comment', type: 'string' }
+  { name: 'FailReason', type: 'string' }
+  { name: 'StatusCode', type: 'int' }
+]
+
 resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
   name: dcrName
   location: location
@@ -185,6 +246,15 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       }
       '${operatorStreamName}': {
         columns: operatorStreamColumns
+      }
+      '${missionStreamName}': {
+        columns: missionStreamColumns
+      }
+      '${serviceAuditStreamName}': {
+        columns: serviceAuditStreamColumns
+      }
+      '${mpsStreamName}': {
+        columns: mpsStreamColumns
       }
     }
     dataSources: {
@@ -205,6 +275,24 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
           name: 'uavOperatorFile'
           streams: [ operatorStreamName ]
           filePatterns: [ operatorLogPath ]
+          format: 'json'
+        }
+        {
+          name: 'uavMissionFile'
+          streams: [ missionStreamName ]
+          filePatterns: [ missionLogPath ]
+          format: 'json'
+        }
+        {
+          name: 'uavServiceAuditFile'
+          streams: [ serviceAuditStreamName ]
+          filePatterns: [ serviceAuditLogPath ]
+          format: 'json'
+        }
+        {
+          name: 'uavMpsFile'
+          streams: [ mpsStreamName ]
+          filePatterns: [ mpsLogPath ]
           format: 'json'
         }
       ]
@@ -236,6 +324,24 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
         transformKql: 'source'
         outputStream: 'Custom-${operatorTableName}'
       }
+      {
+        streams: [ missionStreamName ]
+        destinations: [ 'centralLaw' ]
+        transformKql: 'source'
+        outputStream: 'Custom-${missionTableName}'
+      }
+      {
+        streams: [ serviceAuditStreamName ]
+        destinations: [ 'centralLaw' ]
+        transformKql: 'source'
+        outputStream: 'Custom-${serviceAuditTableName}'
+      }
+      {
+        streams: [ mpsStreamName ]
+        destinations: [ 'centralLaw' ]
+        transformKql: 'source'
+        outputStream: 'Custom-${mpsTableName}'
+      }
     ]
   }
 }
@@ -249,3 +355,6 @@ output dcrImmutableId string = dcr.properties.immutableId
 output telemetryStreamName string = streamName
 output pgseStreamName string = pgseStreamName
 output operatorStreamName string = operatorStreamName
+output missionStreamName string = missionStreamName
+output serviceAuditStreamName string = serviceAuditStreamName
+output mpsStreamName string = mpsStreamName
