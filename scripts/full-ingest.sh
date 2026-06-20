@@ -119,17 +119,15 @@ bold "  vm-monitoring associations applied"
 
 
 step "[3/8] NSG rules (idempotent)"
-declare -A PORT_RULES=(
-    [c4i-rest]="1060:8200"
-    [cyber-posture-rest]="1070:8300"
-    [weapon-rest]="1080:8400"
-    [ti-rest]="1090:8500"
-    [auth-rest]="1100:8600"
-)
-for name in "${!PORT_RULES[@]}"; do
-    val="${PORT_RULES[$name]}"
-    prio="${val%%:*}"
-    port="${val##*:}"
+# Format: name:priority:port. Iterated as plain strings so the script stays
+# compatible with macOS default bash 3.2 (no associative arrays).
+for entry in \
+    "c4i-rest:1060:8200" \
+    "cyber-posture-rest:1070:8300" \
+    "weapon-rest:1080:8400" \
+    "ti-rest:1090:8500" \
+    "auth-rest:1100:8600"; do
+    IFS=':' read -r name prio port <<<"$entry"
     if az network nsg rule show -g "$SIM_RG" --nsg-name "$NSG_NAME" -n "$name" >/dev/null 2>&1; then
         bold "  $name already exists"
     else
