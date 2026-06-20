@@ -28,8 +28,8 @@ param systemNodeCount int = 2
 @description('VM size for the system node pool. D4s_v5 = balanced for kagent + LangGraph workloads.')
 param systemNodeSize string = 'Standard_D4s_v5'
 
-@description('Kubernetes minor version. Empty = AKS default.')
-param kubernetesVersion string = '1.30'
+@description('Kubernetes minor version. Empty = AKS regional default (recommended).')
+param kubernetesVersion string = ''
 
 @description('Log Analytics workspace resource id to wire AKS container insights into. Output of data.bicep.')
 param workspaceId string = ''
@@ -58,7 +58,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-05-01' = {
     tier: 'Free'
   }
   properties: {
-    kubernetesVersion: kubernetesVersion
+    kubernetesVersion: empty(kubernetesVersion) ? null : kubernetesVersion
     dnsPrefix: dnsPrefix
     enableRBAC: true
     nodeResourceGroup: '${resourceGroup().name}-aks-nodes'
