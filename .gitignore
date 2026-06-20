@@ -16,3 +16,6 @@ mav.parm
 # Local overrides
 docker-compose.override.yml
 .env
+
+# Bicep build artifacts
+infra/*.json
