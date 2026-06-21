@@ -3,38 +3,30 @@
 브라우저만으로 클라우드 UAV 시뮬레이션의 GCS(QGroundControl)에 접속해서 미션을 띄우는 방법.
 
 > **대상**: 팀원 누구나 (Mac/Windows/Linux/모바일도 가능)
-> **필요한 것**: 모던 브라우저(Chrome/Firefox/Edge/Safari) + 우리 FQDN
+> **필요한 것**: 모던 브라우저(Chrome/Firefox/Edge/Safari)
 > **로컬에 QGC 설치 불필요** — 컨테이너 안에서 Xvfb + noVNC로 띄움
 
 ---
 
 ## 1. 접속 정보
 
-### FQDN 받기
-
-```bash
-az deployment group show -g dah-sim-rg -n uavsim-mvp \
-  --query properties.outputs.fqdn.value -o tsv
-```
-
-현재 값 (예시):
-```
-uavsim-2kv7vfcrafu3o.koreacentral.cloudapp.azure.com
-```
+### 호스트
+- 도메인: **`sim.pollak.store`** (양진수 소유, 한국 Azure VM으로 매핑)
+- 원본 FQDN: `uavsim-2kv7vfcrafu3o.koreacentral.cloudapp.azure.com` (직접 접근도 가능)
 
 ### 접속 URL
 
 | 용도 | URL |
 |---|---|
-| QGroundControl (브라우저) | `http://<FQDN>:8080/vnc.html` |
-| pgse-stub Swagger | `http://<FQDN>:8000/docs` |
-| mps-stub Swagger | `http://<FQDN>:8100/docs` |
-| c4i-stub Swagger | `http://<FQDN>:8200/docs` |
-| cyber-posture Swagger | `http://<FQDN>:8300/docs` |
-| weapon-stub Swagger | `http://<FQDN>:8400/docs` |
-| ti-stub Swagger | `http://<FQDN>:8500/docs` |
-| auth-stub Swagger | `http://<FQDN>:8600/docs` |
-| MAVLink TCP (red team) | `<FQDN>:5790` |
+| **QGroundControl (브라우저)** | **`http://sim.pollak.store:8080/vnc.html`** |
+| pgse-stub Swagger | `http://sim.pollak.store:8000/docs` |
+| mps-stub Swagger | `http://sim.pollak.store:8100/docs` |
+| c4i-stub Swagger | `http://sim.pollak.store:8200/docs` |
+| cyber-posture Swagger | `http://sim.pollak.store:8300/docs` |
+| weapon-stub Swagger | `http://sim.pollak.store:8400/docs` |
+| ti-stub Swagger | `http://sim.pollak.store:8500/docs` |
+| auth-stub Swagger | `http://sim.pollak.store:8600/docs` |
+| MAVLink TCP (red team) | `sim.pollak.store:5790` |
 
 > 본 환경은 데모용으로 NSG가 모든 IP에서 접근 허용. 발표 끝나면 닫음.
 
@@ -42,7 +34,7 @@ uavsim-2kv7vfcrafu3o.koreacentral.cloudapp.azure.com
 
 ## 2. 첫 접속
 
-1. 브라우저로 `http://<FQDN>:8080/vnc.html` 진입
+1. 브라우저로 `http://sim.pollak.store:8080/vnc.html` 진입
 2. 우측 상단 **"Connect"** 버튼 클릭
 3. 비밀번호 입력란이 뜨면 **그냥 Enter** (현재 미설정)
 4. QGroundControl 화면이 나타남
@@ -157,8 +149,8 @@ Arm 후 자동으로 미션 실행. 차량이:
 ### B. 펌웨어 변조 시연
 별도 터미널에서:
 ```bash
-FQDN=<your-fqdn>
-curl -X POST http://$FQDN:8000/preflight/check \
+HOST=sim.pollak.store
+curl -X POST http://$HOST:8000/preflight/check \
   -H "Content-Type: application/json" \
   -d '{
     "uav_id":"MPD-001",
@@ -172,12 +164,12 @@ curl -X POST http://$FQDN:8000/preflight/check \
 
 ### C. 임무계획 2-person 위반
 ```bash
-PLAN=$(curl -s -X POST http://$FQDN:8100/plans \
+PLAN=$(curl -s -X POST http://$HOST:8100/plans \
   -H "Content-Type: application/json" \
   -d '{"uav_id":"MPD-001","planner":"lt.kim","callsign":"X","waypoints":[{"seq":0,"lat":37.5326,"lon":127.0246,"alt_m":30,"action":"navigate"}],"roe":"recon-only","payload_config":"EO_IR"}' \
   | jq -r .plan_id)
 
-curl -X POST http://$FQDN:8100/plans/$PLAN/approve \
+curl -X POST http://$HOST:8100/plans/$PLAN/approve \
   -H "Content-Type: application/json" \
   -d '{"approver":"lt.kim","comment":"self-approve"}'
 ```
@@ -185,7 +177,7 @@ curl -X POST http://$FQDN:8100/plans/$PLAN/approve \
 
 ### D. 사이버 태세 상향
 ```bash
-curl -X POST http://$FQDN:8300/posture \
+curl -X POST http://$HOST:8300/posture \
   -H "Content-Type: application/json" \
   -d '{"level":"CT-1","changed_by":"col.lee","reason":"active-jamming","source":"사이버사"}'
 ```
