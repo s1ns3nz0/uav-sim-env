@@ -23,6 +23,9 @@ param dcrId string
 @description('Optional secondary DCR id for overflow streams (empty = skip).')
 param dcrIdExtras string = ''
 
+@description('Optional tertiary DCR id for KUS-FS 확장 신규 streams (empty = skip).')
+param dcrIdExt2 string = ''
+
 @description('Azure region. Must match the VM.')
 param location string = 'koreacentral'
 
@@ -59,6 +62,16 @@ resource dcraExtras 'Microsoft.Insights/dataCollectionRuleAssociations@2023-03-1
   properties: {
     dataCollectionRuleId: dcrIdExtras
     description: 'Secondary DCR — overflow NDJSON streams beyond the 10-logFiles cap.'
+  }
+  dependsOn: [ ama ]
+}
+
+resource dcraExt2 'Microsoft.Insights/dataCollectionRuleAssociations@2023-03-11' = if (!empty(dcrIdExt2)) {
+  name: 'uav-dcr-association-ext2'
+  scope: vm
+  properties: {
+    dataCollectionRuleId: dcrIdExt2
+    description: 'Tertiary DCR — KUS-FS 확장(편대+SATCOM) 신규 5개 스트림.'
   }
   dependsOn: [ ama ]
 }

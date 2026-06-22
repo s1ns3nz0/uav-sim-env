@@ -94,7 +94,7 @@ command -v ssh >/dev/null || fail "ssh not installed"
 az account show >/dev/null || fail "az not logged in (run: az login)"
 
 
-step "[2/8] bicep deploy (tables + dcr + dcr-extras + vm-monitoring assoc)"
+step "[2/8] bicep deploy (tables + dcr + dcr-extras + dcr-ext2 + vm-monitoring assoc)"
 cd "$REPO_DIR/infra/sentinel"
 retry 3 5 az deployment group create -g "$DATA_RG" -f tables.bicep \
     -n tables-mvp -p workspaceName="$DATA_WS" >/dev/null
@@ -105,16 +105,23 @@ bold "  dcr.bicep applied (primary 10 streams)"
 retry 3 5 az deployment group create -g "$DATA_RG" -f dcr-extras.bicep \
     -n dcr-extras-mvp -p workspaceName="$DATA_WS" >/dev/null
 bold "  dcr-extras.bicep applied (overflow 9 streams)"
+retry 3 5 az deployment group create -g "$DATA_RG" -f dcr-ext2.bicep \
+    -n dcr-ext2-mvp -p workspaceName="$DATA_WS" >/dev/null
+bold "  dcr-ext2.bicep applied (KUS-FS 확장 5 streams)"
 
 DCR_PRIMARY_ID="$(az deployment group show -g "$DATA_RG" -n dcr-mvp \
     --query properties.outputs.dcrId.value -o tsv)"
 DCR_EXTRAS_ID="$(az deployment group show -g "$DATA_RG" -n dcr-extras-mvp \
     --query properties.outputs.dcrId.value -o tsv)"
+DCR_EXT2_ID="$(az deployment group show -g "$DATA_RG" -n dcr-ext2-mvp \
+    --query properties.outputs.dcrId.value -o tsv)"
 bold "  primary DCR: $DCR_PRIMARY_ID"
 bold "  extras  DCR: $DCR_EXTRAS_ID"
+bold "  ext2    DCR: $DCR_EXT2_ID"
 
 retry 3 5 az deployment group create -g "$SIM_RG" -f vm-monitoring.bicep \
-    -n vm-mon-mvp -p dcrId="$DCR_PRIMARY_ID" -p dcrIdExtras="$DCR_EXTRAS_ID" >/dev/null
+    -n vm-mon-mvp -p dcrId="$DCR_PRIMARY_ID" -p dcrIdExtras="$DCR_EXTRAS_ID" \
+    -p dcrIdExt2="$DCR_EXT2_ID" >/dev/null
 bold "  vm-monitoring associations applied"
 
 

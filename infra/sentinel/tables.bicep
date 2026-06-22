@@ -629,6 +629,128 @@ resource uavDatalinkConn 'Microsoft.OperationalInsights/workspaces/tables@2023-0
   }
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// 확장(KUS-FS 편대 + SATCOM) 신규 테이블 — schema 문서 §20
+// ───────────────────────────────────────────────────────────────────────────
+
+// SATCOM(BLOS) 위성 링크/세션 상태 — datalink-satcom(OpenSAND) satcom.ndjson.
+resource uavSatcomLink 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVSatcomLink_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 30
+    totalRetentionInDays: 90
+    schema: {
+      name: 'UAVSatcomLink_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'LinkId', type: 'string' }
+        { name: 'SessionId', type: 'string' }
+        { name: 'Seq', type: 'long' }
+        { name: 'IntegrityStatus', type: 'string' }
+        { name: 'RttMs', type: 'real' }
+        { name: 'JamIndicator', type: 'real' }
+        { name: 'SrcAddr', type: 'string' }
+        { name: 'DstAddr', type: 'string' }
+      ]
+    }
+  }
+}
+
+// SAR 페이로드 프레임 메타 — sar-stub sar.ndjson.
+resource uavSarPayload 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVSarPayload_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVSarPayload_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'FrameId', type: 'string' }
+        { name: 'TargetLat', type: 'real' }
+        { name: 'TargetLon', type: 'real' }
+        { name: 'Resolution', type: 'string' }
+        { name: 'SensorMode', type: 'string' }
+        { name: 'SizeBytes', type: 'long' }
+      ]
+    }
+  }
+}
+
+// GCS 원격접속(noVNC/VNC) 감사 — gcs-qgc gcs-access.ndjson.
+resource uavGcsAccess 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVGcsAccess_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 365
+    schema: {
+      name: 'UAVGcsAccess_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'ClientIp', type: 'string' }
+        { name: 'Transport', type: 'string' }
+        { name: 'SessionStart', type: 'datetime' }
+        { name: 'SessionEnd', type: 'datetime' }
+        { name: 'UserAgent', type: 'string' }
+        { name: 'BytesTransferred', type: 'long' }
+      ]
+    }
+  }
+}
+
+// mavlink-router 내부 통계 — datalink-los router-stats.ndjson.
+resource uavRouterStats 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVRouterStats_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 30
+    totalRetentionInDays: 90
+    schema: {
+      name: 'UAVRouterStats_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EndpointName', type: 'string' }
+        { name: 'MsgRx', type: 'long' }
+        { name: 'MsgTx', type: 'long' }
+        { name: 'MsgDropped', type: 'long' }
+        { name: 'CrcErrors', type: 'long' }
+      ]
+    }
+  }
+}
+
+// 편대 단위 상태/이상 요약 — telemetry-tap 파생 fleet-state.ndjson.
+resource uavFleetState 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVFleetState_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVFleetState_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'WindowStart', type: 'datetime' }
+        { name: 'FleetId', type: 'string' }
+        { name: 'ActiveUAVCount', type: 'int' }
+        { name: 'DivergingCount', type: 'int' }
+        { name: 'CommonCommand', type: 'string' }
+        { name: 'AnomalyScore', type: 'real' }
+      ]
+    }
+  }
+}
+
 output tableName string = uavTelemetry.name
 output tableId string = uavTelemetry.id
 output pgseTableName string = uavPgse.name
@@ -651,3 +773,8 @@ output imageryTableName string = uavImagery.name
 output configAuditTableName string = uavConfigAudit.name
 output resourceMetricsTableName string = uavResourceMetrics.name
 output datalinkConnTableName string = uavDatalinkConn.name
+output satcomLinkTableName string = uavSatcomLink.name
+output sarPayloadTableName string = uavSarPayload.name
+output gcsAccessTableName string = uavGcsAccess.name
+output routerStatsTableName string = uavRouterStats.name
+output fleetStateTableName string = uavFleetState.name
