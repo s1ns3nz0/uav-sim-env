@@ -671,6 +671,77 @@ UAVWeapon_CL
 
 ---
 
+## 20. 추가 테이블 후보 (확장 시 — 아직 미배포)
+
+> 아래는 KUS-FS급 확장 검토에서 도출된 **추가 테이블 후보**다. 현재 tables.bicep/dcr에는 **없으며**, 실제 Sentinel 반영은 확장 단계에서 진행한다. 우선순위 순.
+
+### 20.1 `UAVSatcomLink_CL` (A순위 — 확장 핵심)
+- **출처**: `datalink-satcom`(OpenSAND) 자체 NDJSON (`satcom.ndjson`). MAVLink 경로 아님.
+- **위협면**: **S3**(SATCOM MITM·무결성·세션 하이재킹·재밍).
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| UAVId | string | 편대 식별 (예: `MUAV-001`) |
+| LinkId | string | 위성 링크 식별 |
+| SessionId | string | 위성 세션 ID (하이재킹 탐지) |
+| Seq | long | 시퀀스 번호 (점프 탐지) |
+| IntegrityStatus | string | `ok`/`signature_mismatch`/`replay` 등 |
+| RttMs | real | 왕복 지연 (GEO ~600ms 기준 이상 탐지) |
+| JamIndicator | real | 재밍 정황 지표 |
+| SrcAddr, DstAddr | string | 링크 양단 |
+
+### 20.2 `UAVSarPayload_CL` (A순위 — 확장 핵심)
+- **출처**: `sar-stub` 자체 NDJSON. SAR 프레임 메타(+더미 이미지 메타).
+- **위협면**: SAR 표적조작·영상유출·비정상 수집.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| UAVId | string | |
+| FrameId | string | SAR 프레임 식별 |
+| TargetLat, TargetLon | real | 수집 표적 좌표 (임무 외 좌표 탐지) |
+| Resolution | string | 해상도/모드 |
+| SensorMode | string | `spot`/`strip`/`gmti` 등 |
+| SizeBytes | long | 프레임 용량 (폭증 탐지) |
+
+### 20.3 `UAVGcsAccess_CL` (B순위 — 현행 갭)
+- **출처**: `gcs-qgc`의 noVNC(`:8080`)/VNC(`:5900`) 접속 로그(websockify/x11vnc). 현재 **미수집 사각지대**.
+- **의의**: 조종 콘솔 원격접속 자체 감사 — `UAVOpAudit_CL`(로그인)·`UAVOperator_CL`(명령)으로도 안 잡히는 "콘솔에 붙은 행위" 탐지.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| ClientIp | string | 접속 IP |
+| Transport | string | `novnc`/`vnc` |
+| SessionStart, SessionEnd | datetime | 세션 구간 |
+| UserAgent | string | 브라우저/클라이언트 |
+| BytesTransferred | long | 전송량 |
+
+### 20.4 `UAVRouterStats_CL` (B순위 — 라우터 내부 가시성)
+- **출처**: `datalink-los`의 mavlink-router 통계(`ReportStats=true`, `/tmp/mavlink-router.log`). `UAVDatalink_CL`(docker 네트워크 카운터)과 달리 **라우터 내부 지표**.
+- **의의**: 라우팅 메시지 수·드롭·malformed MAVLink·라우팅 실패 탐지.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| EndpointName | string | `av_in`/`gcs_out`/`tap_out`/`tcp_5790` |
+| MsgRx, MsgTx | long | 라우팅 메시지 수 |
+| MsgDropped | long | 드롭 |
+| CrcErrors | long | malformed/CRC 오류 (인젝션 정황) |
+
+### 20.5 `UAVFleetState_CL` (C순위 — 선택; 분석룰 우선)
+- 편대(2~4대) 동시 항로이탈·일괄 명령 등 횡적확산은 **기존 `UAVTelemetry_CL`/`UAVOperator_CL` 위 KQL 분석으로 우선 처리** 권장. 부하·재사용성이 문제될 때만 요약 테이블로 신설.
+- (신설 시 안) `WindowStart`, `FleetId`, `ActiveUAVCount`, `DivergingCount`, `CommonCommand`, `AnomalyScore`.
+
+### 보류 (표준 솔루션으로 충분 / 비용 대비 낮음)
+- ArduPilot dataflash(.bin)·콘솔 로그 — 대용량, MAVLink로 대부분 커버.
+- OS/호스트(Syslog·AzureActivity·네트워크 egress) — `vm-monitoring`/`azure-activity` 표준 수집.
+- 영상/SAR 원본 바이너리 — 메타(`UAVImagery_CL`/`UAVSarPayload_CL`)로 충분.
+- C4I 공군→육군 핸드오프 — 신규 테이블 대신 `UAVC4I_CL`에 EventType 추가.
+
+---
+
 ## 부록 B — 데이터 모델 단순 그림
 
 ```
