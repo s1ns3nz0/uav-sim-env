@@ -1,0 +1,50 @@
+# MUAV persona — KUS-FS 중고도 무인기 (MALE, UAS Group 4)
+# Reference: docs/muav-background.md — ADD + 대한항공, MTOW 5,750kg, 1,200hp 터보프롭 1기,
+#            ceiling ~45,000ft(13.7km), 24h 장기체공, LOS(C-band)+SATCOM(Ku/Ka) 이중 링크, 공군 운용.
+# Frame: fixed-wing (ArduPlane -f plane). 활주로 이착륙(고정익), VTOL 없음 — MPD와의 정의적 차이.
+#
+# NOTE: 값은 SITL 데모 스케일이며 실제 비행제어 튜닝값이 아님. 파라미터명은 ArduPilot Plane-4.5 기준.
+#       SITL이 모르는 파라미터는 경고만 내고 무시하므로 부팅에는 영향 없음.
+# Parameter overrides applied on top of ArduPilot SITL default Plane params.
+
+# --- Airspeed (MALE 순항 ~55 m/s 가정) ---
+ARSPD_USE          1
+ARSPD_FBW_MIN      28
+ARSPD_FBW_MAX      80
+TRIM_ARSPD_CM      5500
+
+# --- Throttle ---
+THR_MIN            0
+THR_MAX            90
+TRIM_THROTTLE      50
+
+# --- Loiter / waypoint (대형 기체 → 큰 선회반경) ---
+WP_LOITER_RAD      400
+WP_RADIUS          90
+
+# --- GPS / GNSS (군용 M-code 미반영, 시뮬용 single GPS) ---
+GPS_TYPE           1
+GPS_AUTO_SWITCH    1
+
+# --- Telemetry / MAVLink rates (SATCOM·SAR 영상 대역 ↑, MPD 대비 상향) ---
+SR0_POSITION       3
+SR0_EXT_STAT       2
+SR0_EXTRA1         10
+SR0_EXTRA2         4
+SR0_EXTRA3         2
+
+# --- Failsafe (이중 링크: LOS 손실 시 즉시 RTL 대신 선회 후 BLOS 지속 가정) ---
+FS_SHORT_ACTN      0
+FS_LONG_ACTN       1
+FS_GCS_ENABL       1
+
+# --- Geofence: 데모 중 고도/영역 위반 방지 위해 비활성 ---
+FENCE_ENABLE       0
+
+# --- EO/IR + SAR payload (gimbal mount stub) ---
+MNT1_TYPE          1
+MNT1_DEFLT_MODE    3
+
+# --- SITL convenience: disable arming checks ---
+# 실제 운용은 유지. SITL은 RC/컴퍼스 캘리브 등이 없어 비활성.
+ARMING_CHECK       0

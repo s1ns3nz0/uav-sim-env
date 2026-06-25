@@ -12,7 +12,9 @@ HOME_HEADING="${HOME_HEADING:-0}"
 MAVLINK_OUT_HOST="${MAVLINK_OUT_HOST:-datalink-los}"
 MAVLINK_OUT_PORT="${MAVLINK_OUT_PORT:-14550}"
 
-PERSONA_PARAM="/home/sitl/persona/mpd_quadplane.parm"
+# Persona param file is env-selectable so one av image can serve multiple
+# airframes (MPD quadplane / MUAV fixed-wing). Default keeps MPD behavior.
+PERSONA_PARAM="${PERSONA_PARAM:-/home/sitl/persona/mpd_quadplane.parm}"
 BOOTSTRAP_SCRIPT="/home/sitl/bootstrap.py"
 LOG_DIR="/home/sitl/logs"
 mkdir -p "$LOG_DIR"
@@ -32,10 +34,14 @@ cd /home/sitl/ardupilot
 # startup, so the MPD persona param file is the single source of truth every
 # time the container restarts. Without this, ARMING_CHECK and similar params
 # silently revert to whatever the previous session wrote.
+# --no-rebuild: 이미지(Dockerfile)에서 이미 `./waf plane` 로 빌드된 arduplane
+# 바이너리를 그대로 사용한다. 이게 없으면 sim_vehicle.py 가 시작 시 ArduPilot 을
+# 런타임 재컴파일(1289 유닛)하여 컨테이너 메모리 한계를 넘겨 OOMKilled 된다.
 exec Tools/autotest/sim_vehicle.py \
     -v "$VEHICLE" \
     -f "$FRAME" \
     -I "$INSTANCE" \
+    --no-rebuild \
     --no-mavproxy \
     --wipe-eeprom \
     --custom-location "${HOME_LAT},${HOME_LON},${HOME_ALT},${HOME_HEADING}" \

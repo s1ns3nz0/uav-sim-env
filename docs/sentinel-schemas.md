@@ -808,9 +808,9 @@ UAVWeapon_CL
 
 ---
 
-## 20. 확장 신규 테이블 (IaC 반영됨 — 배포 대기)
+## 20. 확장 신규 테이블 (✅ 라이브 배포 확인 — 2026-06-25)
 
-> 아래 5개는 KUS-FS급 확장(편대 + SATCOM)용 신규 테이블이다. **`infra/sentinel/tables.bicep` + 신규 `dcr-ext2.bicep` + `vm-monitoring.bicep`(3번째 DCRA)에 정의 완료** 상태이며, `scripts/full-ingest.sh` 실행 시 함께 배포된다(라이브 Azure 반영은 `az` 인증 환경에서). DCR당 10-logFiles 한계로 primary(10)/extras(9)와 분리해 **세 번째 DCR(`dah-data-uav-dcr-ext2`, 5 스트림)** 로 묶었다. 우선순위 순.
+> 아래 5개는 KUS-FS급 확장(편대 + SATCOM)용 신규 테이블이다. **`infra/sentinel/tables.bicep` + 신규 `dcr-ext2.bicep` + `vm-monitoring.bicep`(3번째 DCRA)에 정의 완료**되었고, **2026-06-25 라이브 워크스페이스(`dah-data-law`)에 배포 확인됨** — 총 24개 `UAV*_CL` 존재, 세 번째 DCR `dah-data-uav-dcr-ext2`(5 스트림) 가동. DCR당 10-logFiles 한계로 primary(10)/extras(9)와 분리했다. 우선순위 순. (⏳ 미검증: 신규 테이블 실제 인입량·Sentinel 분석룰 활성 여부.)
 
 ### 20.1 `UAVSatcomLink_CL` (A순위 — 확장 핵심)
 - **출처**: `datalink-satcom`(OpenSAND) 자체 NDJSON (`satcom.ndjson`). MAVLink 경로 아님.

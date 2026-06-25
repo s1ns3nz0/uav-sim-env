@@ -1,0 +1,58 @@
+# ground — mps-stub: 지상통제(임무계획) 대표 워크로드. 노드풀: system.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mps-stub
+  namespace: ground
+  labels:
+    app: mps-stub
+spec:
+  selector:
+    app: mps-stub
+  ports:
+    - name: http
+      port: 8100
+      targetPort: 8100
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mps-stub
+  namespace: ground
+  labels:
+    app: mps-stub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mps-stub
+  template:
+    metadata:
+      labels:
+        app: mps-stub
+    spec:
+      nodeSelector:
+        pool: system
+      containers:
+        - name: mps-stub
+          image: uavsim/mps:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: LOG_FILE_PATH, value: /var/log/uav-sim-env/mps.ndjson }
+          ports:
+            - name: http
+              containerPort: 8100
+          readinessProbe:
+            tcpSocket:
+              port: 8100
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: logs
+              mountPath: /var/log/uav-sim-env
+          resources:
+            requests: { cpu: "50m", memory: 64Mi }
+            limits: { cpu: "250m", memory: 128Mi }
+      volumes:
+        - name: logs
+          emptyDir: {}

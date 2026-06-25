@@ -1,0 +1,71 @@
+# link — datalink-satcom: BLOS SATCOM 링크 + S3 태깅.
+# 노드풀: satcom (전용·taint). OpenSAND 의 특수 네트워킹/권한을 격리하는 자리.
+apiVersion: v1
+kind: Service
+metadata:
+  name: datalink-satcom
+  namespace: link
+  labels:
+    app: datalink-satcom
+spec:
+  selector:
+    app: datalink-satcom
+  ports:
+    - name: control
+      port: 8800
+      targetPort: 8800
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: datalink-satcom
+  namespace: link
+  labels:
+    app: datalink-satcom
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: datalink-satcom
+  template:
+    metadata:
+      labels:
+        app: datalink-satcom
+    spec:
+      nodeSelector:
+        pool: satcom
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: satcom
+          effect: NoSchedule
+      containers:
+        - name: datalink-satcom
+          image: uavsim/datalink-satcom:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: UAV_ID, value: "MUAV-001" }
+            - { name: LINK_ID, value: "KU-LINK-1" }
+            - { name: GEO_RTT_MS, value: "600" }
+            - { name: EMIT_INTERVAL_SEC, value: "5" }
+            - { name: SRC_ADDR, value: "10.60.0.10" }
+            - { name: DST_ADDR, value: "10.60.0.20" }
+            - { name: LOG_FILE_PATH, value: /var/log/uav-sim-env/satcom.ndjson }
+          ports:
+            - name: control
+              containerPort: 8800
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8800
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: logs
+              mountPath: /var/log/uav-sim-env
+          resources:
+            requests: { cpu: "100m", memory: 128Mi }
+            limits: { cpu: "500m", memory: 256Mi }
+      volumes:
+        - name: logs
+          emptyDir: {}

@@ -1,0 +1,165 @@
+"""datalink-satcom — BLOS (SATCOM) link emulation + integrity tagging layer.
+
+KUS-FS (MUAV, UAS Group 4) gains a second data link: Ku/Ka SATCOM via ANASIS-II
+(GEO, ~600ms RTT). This service models that BLOS link's *link-layer signal* and
+the security metadata the SOC needs for S3 detection, emitting it as NDJSON to
+LOG_FILE_PATH -> UAVSatcomLink_CL.
+
+Scope (Phase B / tagging-first): this is the integrity/session/seq/RTT/jam
+tagging layer described in docs/uas-detail-6-satcom.md §2.3. The OpenSAND
+DVB-S2/RCS2 physical-layer emulation (ST/SAT/GW) is layered in afterwards; here
+we model the link characteristics and expose a control surface to drive the S3
+(SATCOM MITM) scenario:
+
+    integrity -> IntegrityStatus = signature_mismatch    (S3-satcom-integrity-fail)
+    replay    -> IntegrityStatus = replay + Seq regress   (replay / MITM)
+    hijack    -> SessionId changes mid-stream on same LinkId (S3-satcom-session-hijack)
+    jam       -> JamIndicator high + RttMs anomaly        (jamming)
+
+A background thread emits one link-status record every EMIT_INTERVAL_SEC.
+"""
+from __future__ import annotations
+
+import json
+import os
+import random
+import threading
+import time
+from datetime import datetime, timezone
+from typing import Any, Literal
+
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
+
+
+UAV_ID = os.environ.get("UAV_ID", "MUAV-001")
+LINK_ID = os.environ.get("LINK_ID", "KU-LINK-1")
+LOG_FILE_PATH = os.environ.get("LOG_FILE_PATH", "")
+GEO_RTT_MS = float(os.environ.get("GEO_RTT_MS", "600"))
+EMIT_INTERVAL_SEC = float(os.environ.get("EMIT_INTERVAL_SEC", "5"))
+SRC_ADDR = os.environ.get("SRC_ADDR", "10.60.0.10")   # AV-side satellite terminal (ST)
+DST_ADDR = os.environ.get("DST_ADDR", "10.60.0.20")   # teleport gateway (GW)
+
+app = FastAPI(
+    title="datalink-satcom",
+    version="0.1.0",
+    description="BLOS SATCOM link emulation + integrity tagging (UAVSatcomLink_CL).",
+)
+
+_log_file_handle = None
+_lock = threading.Lock()
+
+# Mutable link state shared between the emitter thread and the control API.
+_state: dict[str, Any] = {
+    "session_id": "S-1001",
+    "seq": 0,
+    "mode": "normal",     # normal | integrity | replay | jam
+    "mode_until": 0.0,    # epoch seconds; 0 = persistent (normal)
+}
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _emit(event: dict[str, Any]) -> None:
+    if _log_file_handle is None:
+        return
+    enriched = {"TimeGenerated": _now_iso(), **event}
+    _log_file_handle.write(json.dumps(enriched, separators=(",", ":"), default=str) + "\n")
+    _log_file_handle.flush()
+
+
+def _build_record() -> dict[str, Any]:
+    """Compute one link-status record from current state, applying any attack mode."""
+    with _lock:
+        # Expire a timed attack mode.
+        if _state["mode"] != "normal" and _state["mode_until"] and time.time() > _state["mode_until"]:
+            _state["mode"] = "normal"
+            _state["mode_until"] = 0.0
+
+        mode = _state["mode"]
+        _state["seq"] += 1
+        seq = _state["seq"]
+        session_id = _state["session_id"]
+
+        integrity = "ok"
+        jam = round(random.uniform(0.0, 0.05), 3)
+        rtt = round(GEO_RTT_MS + random.uniform(-8, 8), 1)
+
+        if mode == "integrity":
+            integrity = "signature_mismatch"
+        elif mode == "replay":
+            integrity = "replay"
+            seq = max(1, seq - random.randint(3, 8))   # reported sequence regresses
+        elif mode == "jam":
+            jam = round(random.uniform(0.6, 0.95), 3)
+            rtt = round(GEO_RTT_MS + random.uniform(200, 1200), 1)
+
+        return {
+            "UAVId": UAV_ID,
+            "LinkId": LINK_ID,
+            "SessionId": session_id,
+            "Seq": seq,
+            "IntegrityStatus": integrity,
+            "RttMs": rtt,
+            "JamIndicator": jam,
+            "SrcAddr": SRC_ADDR,
+            "DstAddr": DST_ADDR,
+            "Mode": mode,
+        }
+
+
+def _emitter_loop() -> None:
+    while True:
+        _emit(_build_record())
+        time.sleep(EMIT_INTERVAL_SEC)
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    global _log_file_handle
+    if LOG_FILE_PATH:
+        os.makedirs(os.path.dirname(LOG_FILE_PATH) or ".", exist_ok=True)
+        _log_file_handle = open(LOG_FILE_PATH, "a", encoding="utf-8")
+    threading.Thread(target=_emitter_loop, daemon=True).start()
+
+
+class InjectRequest(BaseModel):
+    type: Literal["integrity", "replay", "hijack", "jam"]
+    duration_sec: int = Field(30, ge=1, le=3600)
+
+
+@app.get("/health", tags=["meta"])
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/satcom/state", tags=["satcom"])
+def state() -> dict[str, Any]:
+    with _lock:
+        return dict(_state)
+
+
+@app.post("/satcom/inject", tags=["satcom"])
+def inject(req: InjectRequest) -> dict[str, Any]:
+    """Drive an S3 (SATCOM MITM) condition.
+
+    hijack is a one-shot session change; the others are timed link modes.
+    """
+    with _lock:
+        if req.type == "hijack":
+            old = _state["session_id"]
+            _state["session_id"] = "S-" + str(random.randint(9000, 9999))
+            return {"injected": "hijack", "old_session": old, "new_session": _state["session_id"]}
+        _state["mode"] = req.type
+        _state["mode_until"] = time.time() + req.duration_sec
+        return {"injected": req.type, "duration_sec": req.duration_sec}
+
+
+@app.post("/satcom/reset", tags=["satcom"])
+def reset() -> dict[str, Any]:
+    with _lock:
+        _state["mode"] = "normal"
+        _state["mode_until"] = 0.0
+    return {"mode": "normal"}

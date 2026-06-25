@@ -1,0 +1,10 @@
+apiVersion: kagent.dev/v1alpha2
+kind: ModelProviderConfig
+metadata:
+  name: azure-openai-soc
+  namespace: kagent
+spec:
+  type: AzureOpenAI
+  endpoint: https://dah-aoai-kzjpmnfl4iwvg.openai.azure.com/
+  secretRef:
+    name: aoai-key

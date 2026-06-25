@@ -11,13 +11,17 @@ runtime parameters that the persona parm file cannot reliably set:
 """
 from __future__ import annotations
 
+import os
 import sys
 import time
 
 from pymavlink import mavutil
 
 
-ROUTER_TCP = "tcp:10.50.0.20:5790"
+# Target MAVLink endpoint for the post-boot PARAM_SET. Env-selectable so a second
+# airframe (av-muav, INSTANCE=1 → SITL TCP 5770) can bootstrap against its own
+# local SITL instead of the LOS router. Default keeps MPD behavior.
+ROUTER_TCP = os.environ.get("BOOTSTRAP_ROUTER_TCP", "tcp:10.50.0.20:5790")
 WAIT_BEFORE_CONNECT_SEC = 35
 HEARTBEAT_TIMEOUT_SEC = 30
 MAX_ATTEMPTS = 5

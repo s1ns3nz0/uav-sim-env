@@ -1,0 +1,16 @@
+# kind 클러스터 정의 — AKS 유사 로컬 환경 (균형 충실도)
+#
+# - 멀티노드: control-plane + worker 3개 → AKS 노드풀(system/sitl/satcom) 모사.
+# - default CNI 비활성: Calico 를 설치해 NetworkPolicy 를 "실제로 강제"한다.
+#   (kind 기본 kindnet 은 NetworkPolicy 를 강제하지 않음 → 신뢰경계 검증 불가)
+# - podSubnet 은 Calico 기본 IPv4 풀(192.168.0.0/16)과 일치시킨다.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  disableDefaultCNI: true
+  podSubnet: "192.168.0.0/16"
+nodes:
+  - role: control-plane
+  - role: worker   # up.sh 에서 pool=system 라벨
+  - role: worker   # up.sh 에서 pool=sitl   라벨 (SITL 컴퓨트)
+  - role: worker   # up.sh 에서 pool=satcom 라벨 + taint (OpenSAND 전용 모사)

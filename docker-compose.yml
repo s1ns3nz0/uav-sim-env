@@ -4,6 +4,7 @@ services:
   av-mpd:
     build:
       context: ./av-mpd
+    image: uavsim/av:local
     container_name: uav-av-mpd
     hostname: av-mpd
     networks:
@@ -23,6 +24,39 @@ services:
       - "5760:5760"
     depends_on:
       - datalink-los
+    restart: unless-stopped
+
+  # KUS-FS (Group 4, MALE 고정익) — av-mpd 와 동일 이미지 재사용, persona/frame 만 교체.
+  # NOTE(Phase): 현재는 standalone SITL 부팅 검증용. LOS(C-band)+SATCOM(Ku/Ka) 데이터링크
+  #   정식 라우팅은 datalink-satcom(OpenSAND) 단계(B3)에서 연결된다. 그 전까지는
+  #   bootstrap 이 자기 로컬 SITL(127.0.0.1:5770)로 ARMING_CHECK 를 푼다.
+  av-muav:
+    # profile 로 분리 — 기본 `docker compose up -d`(VM systemd) 에는 안 뜬다.
+    # 로컬 테스트는 `docker compose --profile muav up -d av-muav` 또는 서비스명 직접 지정.
+    # (av-muav 는 AKS/local-k8s 경로용. VM 에 두 번째 SITL 부하 방지.)
+    profiles: ["muav"]
+    build:
+      context: ./av-mpd
+    image: uavsim/av:local
+    container_name: uav-av-muav
+    hostname: av-muav
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.11
+    environment:
+      VEHICLE: ArduPlane
+      FRAME: plane
+      INSTANCE: "1"
+      PERSONA_PARAM: /home/sitl/persona/muav_male.parm
+      BOOTSTRAP_ROUTER_TCP: "tcp:127.0.0.1:5770"
+      MAVLINK_OUT_HOST: datalink-los
+      MAVLINK_OUT_PORT: "14550"
+      HOME_LAT: "37.4030"
+      HOME_LON: "127.1060"
+      HOME_ALT: "300"
+      HOME_HEADING: "0"
+    ports:
+      - "5770:5770"
     restart: unless-stopped
 
   datalink-los:
@@ -46,6 +80,32 @@ services:
       - "14550:14550/udp"
       - "14552:14552/udp"
       - "5790:5790/tcp"
+    restart: unless-stopped
+
+  # BLOS SATCOM link (KUS-FS MUAV) — Phase B 태깅 계층. 위성 링크 신호(세션/시퀀스/
+  # 서명/RTT/재밍)를 satcom.ndjson 으로 emit → UAVSatcomLink_CL. S3 시나리오 진입점.
+  # NOTE: OpenSAND 물리계층(ST/SAT/GW)은 이후 단계에서 이 서비스에 끼워넣는다.
+  #   av-muav MAVLink 의 위성 경로 터널링도 그때 연결. 현재는 링크-계층 메타만.
+  datalink-satcom:
+    build:
+      context: ./datalink-satcom
+    container_name: uav-datalink-satcom
+    hostname: datalink-satcom
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.21
+    environment:
+      UAV_ID: "MUAV-001"
+      LINK_ID: "KU-LINK-1"
+      GEO_RTT_MS: "600"
+      EMIT_INTERVAL_SEC: "5"
+      SRC_ADDR: "10.60.0.10"
+      DST_ADDR: "10.60.0.20"
+      LOG_FILE_PATH: "/var/log/uav-sim-env/satcom.ndjson"
+    volumes:
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
+    ports:
+      - "8800:8800"
     restart: unless-stopped
 
   telemetry-tap:
@@ -199,6 +259,23 @@ services:
       - /var/log/uav-sim-env:/var/log/uav-sim-env
     ports:
       - "8600:8600"
+    restart: unless-stopped
+
+  # SAR payload surface (KUS-FS MUAV) — SAR 프레임 메타 emit → UAVSarPayload_CL.
+  sar-stub:
+    build:
+      context: ./sar-stub
+    container_name: uav-sar-stub
+    hostname: sar-stub
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.120
+    environment:
+      LOG_FILE_PATH: "/var/log/uav-sim-env/sar.ndjson"
+    volumes:
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
+    ports:
+      - "8700:8700"
     restart: unless-stopped
 
   pgse-stub:

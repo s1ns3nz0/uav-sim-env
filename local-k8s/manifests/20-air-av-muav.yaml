@@ -1,0 +1,66 @@
+# air — av-muav: AV 1대 = Pod 1개. StatefulSet 로 안정 식별자 부여(MUAV-0).
+# 헤드리스 Service 가 av-muav-0.av-muav.air.svc 안정 DNS 를 준다.
+# 노드풀: sitl (SITL=CPU 워크로드).
+apiVersion: v1
+kind: Service
+metadata:
+  name: av-muav
+  namespace: air
+  labels:
+    app: av-muav
+spec:
+  clusterIP: None          # headless → StatefulSet 안정 네트워크 식별
+  selector:
+    app: av-muav
+  ports:
+    - name: mavlink
+      port: 5770
+      targetPort: 5770
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: av-muav
+  namespace: air
+  labels:
+    app: av-muav
+spec:
+  serviceName: av-muav
+  replicas: 1              # 편대 규모 = replica 수 (kubectl scale 로 2~4)
+  selector:
+    matchLabels:
+      app: av-muav
+  template:
+    metadata:
+      labels:
+        app: av-muav
+    spec:
+      nodeSelector:
+        pool: sitl
+      containers:
+        - name: sitl
+          image: uavsim/av:local
+          imagePullPolicy: IfNotPresent   # kind load 한 로컬 이미지, 레지스트리 pull 안 함
+          env:
+            - { name: VEHICLE, value: ArduPlane }
+            - { name: FRAME, value: plane }
+            - { name: INSTANCE, value: "1" }
+            - { name: PERSONA_PARAM, value: /home/sitl/persona/muav_male.parm }
+            - { name: BOOTSTRAP_ROUTER_TCP, value: "tcp:127.0.0.1:5770" }
+            - { name: MAVLINK_OUT_HOST, value: datalink-satcom.link.svc.cluster.local }
+            - { name: MAVLINK_OUT_PORT, value: "14550" }
+            - { name: HOME_LAT, value: "37.4030" }
+            - { name: HOME_LON, value: "127.1060" }
+            - { name: HOME_ALT, value: "300" }
+            - { name: HOME_HEADING, value: "0" }
+          ports:
+            - name: mavlink
+              containerPort: 5770
+          readinessProbe:        # 기체 건전성 = MAVLink TCP 가 열렸는가
+            tcpSocket:
+              port: 5770
+            initialDelaySeconds: 40
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "500m", memory: 512Mi }
+            limits: { cpu: "2", memory: 2Gi }
