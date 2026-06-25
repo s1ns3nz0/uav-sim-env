@@ -32,7 +32,9 @@
 > **Phase 3 AKS 이전 ✅ (2026-06-25, GitOps).** `dah-sim-aks`(별도 클러스터, `infra/sim.bicep`: Calico NetworkPolicy + system/sitl/satcom 노드풀) 생성. 9개 이미지 ACR(`dahsimacr…`) 빌드(`az acr build`, amd64). **Helm 차트(`local-k8s/helm/uav-sim`, ground 스텁 6개=템플릿 1개)** 를 **ArgoCD Application(`gitops/`)** 으로 배포 — `Synced/Healthy`, 9개 워크로드 가동. 신뢰경계(Calico)·노드풀 배치 AKS에서 실측 확인(`verify-netpol.sh`). 이후 변경 = git push → ArgoCD 자동 sync.
 > - SOC↔SIM 분리 유지(`dah-soc-aks`=SOC, `dah-sim-aks`=SIM). 쿼터 제약으로 노드는 D2s_v5(필요 시 증액).
 >
-> ⏳ 선택 잔여: ① Multus 이중링크 AKS판(kind에서 핵심 검증 완료), ② av↔datalink↔telemetry-tap MAVLink 데이터패스 정식 배선, ③ OpenSAND 물리계층(한계효용 낮음).
+> **데이터패스 + GCS 외부노출 ✅ (2026-06-25).** `datalink-los`·`telemetry-tap`·`gcs-qgc`를 Helm으로 추가, av-muav SITL ClusterIP(`av-muav-mav`) + datalink-los DNS-resolve conf(`GEN_CONF` 게이트, compose 무영향) + air↔link·link→soc NetworkPolicy 예외로 **av→datalink-los→gcs-qgc MAVLink 데이터패스 완주**(라우터 Handled 19460msg, QGC에 차량 표시). `gcs-qgc-lb`(LoadBalancer) **공인 IP `20.249.193.191`** → `sim.pollak.store` 컷오버 대상.
+>
+> ⏳ 선택 잔여: ① 도메인 DNS 컷오버(sim.pollak.store → LB) + VM gcs 중지, ② Multus 이중링크 AKS판(kind에서 검증 완료), ③ OpenSAND 물리계층(한계효용 낮음).
 
 ---
 

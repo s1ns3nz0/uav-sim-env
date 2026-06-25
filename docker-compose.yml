@@ -299,6 +299,10 @@ services:
     restart: unless-stopped
 
   gcs-qgc:
+    # profile 로 분리 — GCS 는 이제 AKS(gcs-qgc-lb, sim.pollak.store)가 서빙.
+    # VM 기본 `docker compose up -d`(systemd)에는 안 뜬다. 로컬에서 굳이 띄우려면
+    # `docker compose --profile gcs up -d gcs-qgc`.
+    profiles: ["gcs"]
     build:
       context: ./gcs-qgc
     platform: linux/amd64
