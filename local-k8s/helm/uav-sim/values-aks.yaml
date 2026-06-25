@@ -4,3 +4,8 @@ image:
   registry: dahsimacr2kv7vfcrafu3o.azurecr.io   # dah-sim-rg 의 ACR (sim.bicep 출력)
   tag: v1
   pullPolicy: IfNotPresent
+
+# AKS 에서 데이터패스 on (kind 는 off)
+datalinkLos:  { enabled: true }
+telemetryTap: { enabled: true }
+gcsQgc:       { enabled: true }

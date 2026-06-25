@@ -64,3 +64,34 @@ approvedFirmware: |
   {
     "MPD-001": "sha256:0000000000000000000000000000000000000000000000000000000000000001"
   }
+
+# ── 데이터패스 (av↔datalink↔gcs/tap). 기본 off(kind). values-aks 에서 on. ──
+
+# link — datalink-los (LOS RF 라우터, mavlink-router). DNS→IP resolve 후 conf 생성.
+datalinkLos:
+  enabled: false
+  image: datalink-los
+  nodePool: system
+  netem: { delayMs: "50", jitterMs: "5", lossPct: "1" }
+  avHost: av-muav-mav.air.svc.cluster.local
+  avPort: "5770"
+  gcsHost: gcs-qgc.ground.svc.cluster.local
+  gcsPort: "14550"
+  tapHost: telemetry-tap.soc.svc.cluster.local
+  tapPort: "14552"
+
+# soc — telemetry-tap (MAVLink → NDJSON 관측)
+telemetryTap:
+  enabled: false
+  image: telemetry-tap
+  nodePool: system
+  uavId: MUAV-001
+
+# ground — gcs-qgc (QGroundControl noVNC). 도메인이 붙는 GCS UI.
+gcsQgc:
+  enabled: false
+  image: gcs-qgc
+  nodePool: sitl          # av-muav 와 같은 sitl 노드(시스템 풀 혼잡 회피)
+  mavlinkInPort: "14550"
+  vncPassword: uavsim
+  loadBalancer: true      # 외부 공인 IP (도메인 연결용)

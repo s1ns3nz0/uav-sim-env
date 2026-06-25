@@ -20,6 +20,9 @@ builds=(
   "ti-stub:ti"
   "auth-stub:auth"
   "cyber-posture-stub:cyber-posture"
+  "datalink-los:datalink-los"
+  "telemetry-tap:telemetry-tap"
+  "gcs-qgc:gcs-qgc"
 )
 
 for b in "${builds[@]}"; do

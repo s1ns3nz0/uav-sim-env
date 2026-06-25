@@ -1,7 +1,9 @@
 # gcs-qgc — QGroundControl in headless Xvfb + noVNC (browser-accessible GCS)
-# Pinned to linux/amd64 — QGroundControl AppImage v4.4.4 is x86_64-only.
-# On ARM hosts (Mac M-series), this builds via Rosetta or QEMU emulation.
-FROM --platform=linux/amd64 ubuntu:22.04
+# QGroundControl AppImage v4.4.4 는 x86_64 전용. amd64 강제는:
+#   - 로컬 compose: docker-compose.yml 의 gcs-qgc 서비스 `platform: linux/amd64`
+#   - ACR/AKS: 빌더가 이미 amd64 (az acr build --platform linux/amd64 로 명시 가능)
+# FROM 에 --platform 을 박으면 az acr build 의존성 스캐너가 파싱 실패하므로 뺀다.
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Seoul \

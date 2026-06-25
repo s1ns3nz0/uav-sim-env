@@ -29,7 +29,10 @@
 > - **C-확장 ✅** — ground 평면 스텁 5개(pgse+ConfigMap/weapon/ti/auth/cyber-posture) 매니페스트.
 > - **이중 링크 ✅ (Multus + netem)** — av-muav에 `net-los`/`net-satcom` 실제 별도 인터페이스 + 링크별 netem(LOS 50ms / SATCOM 600ms+loss) 로컬 검증(`enable-dual-link.sh`). **ADR 최대 리스크(Multus CNI) 로컬에서 제거.** 풀 OpenSAND 물리계층은 SOC 한계효용 대비 고비용이라 미채택(태깅 계층이 S3 메타 이미 제공).
 >
-> ⏳ 남은 것: **Phase 3 AKS(`dah-sim-aks`) 이전** — 검증된 `local-k8s/` 매니페스트 + `enable-dual-link.sh`를 Azure 클러스터에 재사용. (av↔datalink↔telemetry-tap MAVLink 데이터패스 정식 배선은 이전과 함께.)
+> **Phase 3 AKS 이전 ✅ (2026-06-25, GitOps).** `dah-sim-aks`(별도 클러스터, `infra/sim.bicep`: Calico NetworkPolicy + system/sitl/satcom 노드풀) 생성. 9개 이미지 ACR(`dahsimacr…`) 빌드(`az acr build`, amd64). **Helm 차트(`local-k8s/helm/uav-sim`, ground 스텁 6개=템플릿 1개)** 를 **ArgoCD Application(`gitops/`)** 으로 배포 — `Synced/Healthy`, 9개 워크로드 가동. 신뢰경계(Calico)·노드풀 배치 AKS에서 실측 확인(`verify-netpol.sh`). 이후 변경 = git push → ArgoCD 자동 sync.
+> - SOC↔SIM 분리 유지(`dah-soc-aks`=SOC, `dah-sim-aks`=SIM). 쿼터 제약으로 노드는 D2s_v5(필요 시 증액).
+>
+> ⏳ 선택 잔여: ① Multus 이중링크 AKS판(kind에서 핵심 검증 완료), ② av↔datalink↔telemetry-tap MAVLink 데이터패스 정식 배선, ③ OpenSAND 물리계층(한계효용 낮음).
 
 ---
 

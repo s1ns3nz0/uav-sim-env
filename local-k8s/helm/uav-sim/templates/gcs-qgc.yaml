@@ -1,0 +1,68 @@
+{{- with .Values.gcsQgc }}
+{{- if .enabled }}
+# 클러스터 내부 — datalink-los 가 MAVLink UDP 14550 을 push, noVNC/VNC 도 노출
+apiVersion: v1
+kind: Service
+metadata:
+  name: gcs-qgc
+  namespace: ground
+  labels: { app: gcs-qgc }
+spec:
+  selector: { app: gcs-qgc }
+  ports:
+    - { name: mavlink, port: 14550, targetPort: 14550, protocol: UDP }
+    - { name: novnc,   port: 8080,  targetPort: 8080 }
+    - { name: vnc,     port: 5900,  targetPort: 5900 }
+---
+{{- if .loadBalancer }}
+# 외부 공인 IP — sim.pollak.store 가 붙을 대상
+apiVersion: v1
+kind: Service
+metadata:
+  name: gcs-qgc-lb
+  namespace: ground
+  labels: { app: gcs-qgc }
+spec:
+  type: LoadBalancer
+  selector: { app: gcs-qgc }
+  ports:
+    - { name: novnc, port: 8080, targetPort: 8080 }
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gcs-qgc
+  namespace: ground
+  labels: { app: gcs-qgc }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: gcs-qgc }
+  template:
+    metadata:
+      labels: { app: gcs-qgc }
+    spec:
+      nodeSelector: { pool: {{ .nodePool }} }
+      containers:
+        - name: gcs-qgc
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            - { name: MAVLINK_IN_PORT, value: {{ .mavlinkInPort | quote }} }
+            - { name: VNC_PASSWORD,    value: {{ .vncPassword | quote }} }
+            - { name: DISPLAY,         value: ":0" }
+          ports:
+            - { name: novnc,   containerPort: 8080 }
+            - { name: vnc,     containerPort: 5900 }
+            - { name: mavlink, containerPort: 14550, protocol: UDP }
+          volumeMounts:
+            - { name: shm, mountPath: /dev/shm }
+          resources:
+            requests: { cpu: "250m", memory: 512Mi }
+            limits:   { cpu: "1",    memory: 1536Mi }
+      volumes:
+        - name: shm
+          emptyDir: { medium: Memory, sizeLimit: 512Mi }
+{{- end }}
+{{- end }}

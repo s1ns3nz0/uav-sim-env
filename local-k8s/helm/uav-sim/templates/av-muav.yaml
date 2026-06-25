@@ -11,6 +11,18 @@ spec:
   selector: { app: av-muav }
   ports: [ { name: mavlink, port: 5770, targetPort: 5770 } ]
 ---
+# 안정 ClusterIP — datalink-los(mavlink-router)가 SITL TCP 5770 에 붙는 대상.
+# (헤드리스는 pod IP 라 재시작 시 변동 → 라우터 conf 용으로는 ClusterIP 사용)
+apiVersion: v1
+kind: Service
+metadata:
+  name: av-muav-mav
+  namespace: air
+  labels: { app: av-muav }
+spec:
+  selector: { app: av-muav }
+  ports: [ { name: mavlink, port: 5770, targetPort: 5770 } ]
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

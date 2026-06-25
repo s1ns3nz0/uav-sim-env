@@ -89,3 +89,55 @@ spec:
         - namespaceSelector:
             matchExpressions:
               - { key: plane, operator: In, values: [air, link, ground, c4i] }
+---
+# ── 데이터패스 예외 (RF 링크 양방향 + tap 수신 + GCS 외부접속) ──
+# datalink-los(link) ↔ av SITL(air): RF 링크는 양방향. air 가 ground 로 직행 못 하는
+# 핵심 경계는 유지되고, av↔datalink 만 열어준다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: air-ingress-from-link, namespace: air }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [ { namespaceSelector: { matchLabels: { plane: link } } } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: link-egress-to-air, namespace: link }
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to: [ { namespaceSelector: { matchLabels: { plane: air } } } ]
+---
+# datalink-los(link) → telemetry-tap(soc): 관측 tap 으로 MAVLink 포워딩
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: link-egress-to-soc, namespace: link }
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to: [ { namespaceSelector: { matchLabels: { plane: soc } } } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: soc-ingress-from-link, namespace: soc }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [ { namespaceSelector: { matchLabels: { plane: link } } } ]
+---
+# gcs-qgc(ground) noVNC/VNC 외부 접속 허용 (LoadBalancer → 도메인). 8080/5900 만.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: gcs-external-ingress, namespace: ground }
+spec:
+  podSelector: { matchLabels: { app: gcs-qgc } }
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - { protocol: TCP, port: 8080 }
+        - { protocol: TCP, port: 5900 }

@@ -1,0 +1,56 @@
+{{- with .Values.telemetryTap }}
+{{- if .enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: telemetry-tap
+  namespace: soc
+  labels: { app: telemetry-tap }
+spec:
+  selector: { app: telemetry-tap }
+  ports:
+    - { name: tap, port: 14552, targetPort: 14552, protocol: UDP }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telemetry-tap
+  namespace: soc
+  labels: { app: telemetry-tap }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: telemetry-tap }
+  template:
+    metadata:
+      labels: { app: telemetry-tap }
+    spec:
+      nodeSelector: { pool: {{ .nodePool }} }
+      containers:
+        - name: telemetry-tap
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            - { name: UAV_ID, value: {{ .uavId | quote }} }
+            - { name: LISTEN_HOST, value: "0.0.0.0" }
+            - { name: LISTEN_PORT, value: "14552" }
+            - { name: LOG_FILE_PATH,        value: /var/log/uav-sim-env/telemetry.ndjson }
+            - { name: OPERATOR_FILE_PATH,   value: /var/log/uav-sim-env/operator.ndjson }
+            - { name: MISSION_FILE_PATH,    value: /var/log/uav-sim-env/mission.ndjson }
+            - { name: FAILSAFE_FILE_PATH,   value: /var/log/uav-sim-env/failsafe.ndjson }
+            - { name: CONFIG_AUDIT_FILE_PATH, value: /var/log/uav-sim-env/config-audit.ndjson }
+            - { name: IMAGERY_FILE_PATH,    value: /var/log/uav-sim-env/imagery.ndjson }
+            - { name: MAVSEC_FILE_PATH,     value: /var/log/uav-sim-env/mavsec.ndjson }
+            - { name: MAVSEC_INTERVAL_SEC,  value: "30" }
+          ports:
+            - { name: tap, containerPort: 14552, protocol: UDP }
+          volumeMounts:
+            - { name: logs, mountPath: /var/log/uav-sim-env }
+          resources:
+            requests: { cpu: "50m", memory: 64Mi }
+            limits:   { cpu: "250m", memory: 128Mi }
+      volumes:
+        - name: logs
+          emptyDir: {}
+{{- end }}
+{{- end }}

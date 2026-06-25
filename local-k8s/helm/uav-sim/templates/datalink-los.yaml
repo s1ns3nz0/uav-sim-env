@@ -1,0 +1,53 @@
+{{- with .Values.datalinkLos }}
+{{- if .enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: datalink-los
+  namespace: link
+  labels: { app: datalink-los }
+spec:
+  selector: { app: datalink-los }
+  ports:
+    - { name: router, port: 5790, targetPort: 5790, protocol: TCP }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: datalink-los
+  namespace: link
+  labels: { app: datalink-los }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: datalink-los }
+  template:
+    metadata:
+      labels: { app: datalink-los }
+    spec:
+      nodeSelector: { pool: {{ .nodePool }} }
+      containers:
+        - name: datalink-los
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]      # tc netem (RF 링크 열화 모사)
+          env:
+            - { name: GEN_CONF, value: "1" }   # k8s: 서비스 DNS → IP resolve 후 conf 생성
+            - { name: AV_HOST,  value: {{ .avHost  | quote }} }
+            - { name: AV_PORT,  value: {{ .avPort  | quote }} }
+            - { name: GCS_HOST, value: {{ .gcsHost | quote }} }
+            - { name: GCS_PORT, value: {{ .gcsPort | quote }} }
+            - { name: TAP_HOST, value: {{ .tapHost | quote }} }
+            - { name: TAP_PORT, value: {{ .tapPort | quote }} }
+            - { name: LINK_DELAY_MS,  value: {{ .netem.delayMs  | quote }} }
+            - { name: LINK_JITTER_MS, value: {{ .netem.jitterMs | quote }} }
+            - { name: LINK_LOSS_PCT,  value: {{ .netem.lossPct  | quote }} }
+          ports:
+            - { name: router, containerPort: 5790 }
+          resources:
+            requests: { cpu: "100m", memory: 128Mi }
+            limits:   { cpu: "500m", memory: 256Mi }
+{{- end }}
+{{- end }}
