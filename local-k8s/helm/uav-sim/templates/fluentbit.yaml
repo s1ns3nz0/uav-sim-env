@@ -1,0 +1,108 @@
+{{- with .Values.fluentBit }}
+{{- if .enabled }}
+# Fluent Bit DaemonSet — AKS 컨테이너 stdout(NDJSON)을 읽어 Logs Ingestion API 로
+# 전송 → 기존 DCR → UAV*_CL. 워크로드 ID 로 인증(soc:fluentbit SA ↔ uav-fluentbit MI).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fluentbit
+  namespace: soc
+  labels:
+    azure.workload.identity/use: "true"
+  annotations:
+    azure.workload.identity/client-id: {{ .clientId | quote }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: { name: uav-fluentbit }
+rules:
+  - apiGroups: [""]
+    resources: [pods, namespaces]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: { name: uav-fluentbit }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: uav-fluentbit }
+subjects:
+  - { kind: ServiceAccount, name: fluentbit, namespace: soc }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentbit-config
+  namespace: soc
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush        5
+        Daemon       Off
+        Log_Level    info
+    {{- range .streams }}
+
+    [INPUT]
+        Name             tail
+        Path             /var/log/containers/*{{ .container }}*.log
+        Tag              s_{{ .container }}.*
+        multiline.parser cri
+        Mem_Buf_Limit    10MB
+        Skip_Long_Lines  On
+
+    [FILTER]
+        Name             kubernetes
+        Match            s_{{ .container }}.*
+        Merge_Log        On
+        Keep_Log         Off
+        Labels           Off
+        Annotations      Off
+
+    [FILTER]
+        Name             grep
+        Match            s_{{ .container }}.*
+        Regex            {{ .marker }} .+
+
+    [OUTPUT]
+        Name             azure_logs_ingestion
+        Match            s_{{ .container }}.*
+        client_id        {{ $.Values.fluentBit.clientId }}
+        tenant_id        {{ $.Values.fluentBit.tenantId }}
+        dce_url          {{ $.Values.fluentBit.dceUrl }}
+        dcr_id           {{ .dcrId }}
+        stream_name      {{ .stream }}
+        time_key         TimeGenerated
+        time_generated   true
+    {{- end }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluentbit
+  namespace: soc
+  labels: { app: fluentbit }
+spec:
+  selector:
+    matchLabels: { app: fluentbit }
+  template:
+    metadata:
+      labels:
+        app: fluentbit
+        azure.workload.identity/use: "true"   # WI 토큰 주입
+    spec:
+      serviceAccountName: fluentbit
+      tolerations:
+        - operator: Exists                     # 모든 노드(satcom taint 포함)에서 로그 수집
+      containers:
+        - name: fluentbit
+          image: {{ .image }}
+          args: ["--config=/fluent-bit/etc/fluent-bit.conf"]
+          resources:
+            requests: { cpu: "50m", memory: 64Mi }
+            limits:   { cpu: "200m", memory: 192Mi }
+          volumeMounts:
+            - { name: varlog, mountPath: /var/log, readOnly: true }
+            - { name: config, mountPath: /fluent-bit/etc/fluent-bit.conf, subPath: fluent-bit.conf }
+      volumes:
+        - { name: varlog, hostPath: { path: /var/log } }
+        - { name: config, configMap: { name: fluentbit-config } }
+{{- end }}
+{{- end }}

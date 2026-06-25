@@ -38,7 +38,7 @@ datalinkSatcom:
     EMIT_INTERVAL_SEC: "5"
     SRC_ADDR: "10.60.0.10"
     DST_ADDR: "10.60.0.20"
-    LOG_FILE_PATH: /var/log/uav-sim-env/satcom.ndjson
+    LOG_FILE_PATH: /dev/stdout      # NDJSON → stdout → Fluent Bit → Logs Ingestion → UAVSatcomLink_CL
 
 # c4i — c4i-stub (ATCIS/MIMS 핸드오프 종단)
 c4i:
@@ -95,3 +95,15 @@ gcsQgc:
   mavlinkInPort: "14550"
   vncPassword: uavsim
   loadBalancer: true      # 외부 공인 IP (도메인 연결용)
+
+# Fluent Bit — AKS stdout(NDJSON) → Logs Ingestion API → 기존 DCR → UAV*_CL.
+# 기본 off(kind). values-aks 에서 on. H3a: datalink-satcom → UAVSatcomLink_CL 증명 경로.
+fluentBit:
+  enabled: false
+  image: fluent/fluent-bit:3.2.2
+  clientId: "05f41178-bb7c-4c5a-bfaa-076d0b6a5d94"
+  tenantId: "850b9f0b-8517-4266-adf5-e8aa2d9aa48c"
+  dceUrl: "https://dah-data-dce-ttt8.koreacentral-1.ingest.monitor.azure.com"
+  streams:
+    # container_name 별 → DCR + stream. marker = 그 컴포넌트 레코드만 거르는 필수 필드.
+    - { container: datalink-satcom, dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "Custom-UAVSatcomLink", marker: "LinkId" }

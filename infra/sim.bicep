@@ -114,6 +114,11 @@ resource aks 'Microsoft.ContainerService/managedClusters@2024-05-01' = {
       networkPolicy: 'calico'
       loadBalancerSku: 'standard'
     }
+    // Fluent Bit → Logs Ingestion API 인증용 워크로드 ID (Sentinel 일원화).
+    oidcIssuerProfile: { enabled: true }
+    securityProfile: {
+      workloadIdentity: { enabled: true }
+    }
     addonProfiles: enableMonitoring ? {
       omsagent: {
         enabled: true
