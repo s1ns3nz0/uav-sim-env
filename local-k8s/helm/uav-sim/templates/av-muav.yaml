@@ -1,0 +1,52 @@
+{{- with .Values.avMuav }}
+{{- if .enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: av-muav
+  namespace: air
+  labels: { app: av-muav }
+spec:
+  clusterIP: None
+  selector: { app: av-muav }
+  ports: [ { name: mavlink, port: 5770, targetPort: 5770 } ]
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: av-muav
+  namespace: air
+  labels: { app: av-muav }
+spec:
+  serviceName: av-muav
+  replicas: {{ .replicas }}
+  selector:
+    matchLabels: { app: av-muav }
+  template:
+    metadata:
+      labels: { app: av-muav }
+    spec:
+      nodeSelector: { pool: {{ .nodePool }} }
+      containers:
+        - name: sitl
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            - { name: VEHICLE, value: ArduPlane }
+            - { name: FRAME, value: {{ .frame | quote }} }
+            - { name: INSTANCE, value: {{ .instance | quote }} }
+            - { name: PERSONA_PARAM, value: {{ .persona | quote }} }
+            - { name: BOOTSTRAP_ROUTER_TCP, value: "tcp:127.0.0.1:5770" }
+            - { name: HOME_LAT, value: {{ .home.lat | quote }} }
+            - { name: HOME_LON, value: {{ .home.lon | quote }} }
+            - { name: HOME_ALT, value: {{ .home.alt | quote }} }
+            - { name: HOME_HEADING, value: {{ .home.heading | quote }} }
+          ports: [ { name: mavlink, containerPort: 5770 } ]
+          readinessProbe:
+            tcpSocket: { port: 5770 }
+            initialDelaySeconds: 40
+            periodSeconds: 10
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+{{- end }}
+{{- end }}

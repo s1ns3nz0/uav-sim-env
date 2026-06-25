@@ -1,0 +1,66 @@
+# 기본값 = kind(로컬). aks 는 values-aks.yaml 로 image.registry/tag/pullPolicy 만 덮어씀.
+image:
+  registry: uavsim          # kind: uavsim (kind load) / aks: <acr>.azurecr.io
+  tag: local                # kind: local / aks: v1
+  pullPolicy: IfNotPresent
+
+# 신뢰경계 네임스페이스 (plane 라벨로 NetworkPolicy 가 선택)
+namespaces:
+  - { name: air,    plane: air }
+  - { name: link,   plane: link }
+  - { name: ground, plane: ground }
+  - { name: c4i,    plane: c4i }
+  - { name: soc,    plane: soc }
+
+# air — av-muav (고정익 MALE SITL, StatefulSet)
+avMuav:
+  enabled: true
+  replicas: 1               # 편대 규모 = replica 수
+  image: av
+  frame: plane
+  instance: "1"
+  persona: /home/sitl/persona/muav_male.parm
+  nodePool: sitl
+  home: { lat: "37.4030", lon: "127.1060", alt: "300", heading: "0" }
+  resources:
+    requests: { cpu: "500m", memory: 512Mi }
+    limits:   { cpu: "2",    memory: 2Gi }
+
+# link — datalink-satcom (BLOS SATCOM 링크 + S3 태깅)
+datalinkSatcom:
+  enabled: true
+  image: datalink-satcom
+  nodePool: satcom
+  env:
+    UAV_ID: "MUAV-001"
+    LINK_ID: "KU-LINK-1"
+    GEO_RTT_MS: "600"
+    EMIT_INTERVAL_SEC: "5"
+    SRC_ADDR: "10.60.0.10"
+    DST_ADDR: "10.60.0.20"
+    LOG_FILE_PATH: /var/log/uav-sim-env/satcom.ndjson
+
+# c4i — c4i-stub (ATCIS/MIMS 핸드오프 종단)
+c4i:
+  enabled: true
+  image: c4i
+  port: 8200
+  nodePool: system
+
+# ground — 반복 스텁들. 템플릿 1개가 이 리스트를 순회 (Helm DRY 의 핵심)
+groundStubs:
+  - { name: mps-stub,            image: mps,            port: 8100, logFile: mps.ndjson }
+  - { name: pgse-stub,           image: pgse,           port: 8000, logFile: pgse.ndjson,
+      approvedFirmwareConfigMap: true,
+      extraEnv: { APPROVED_DB: /data/approved_firmware.json, TOKEN_TTL_SEC: "300", MAINT_FILE_PATH: /var/log/uav-sim-env/maintenance.ndjson } }
+  - { name: weapon-stub,         image: weapon,         port: 8400, logFile: weapon.ndjson }
+  - { name: ti-stub,             image: ti,             port: 8500, logFile: ti.ndjson }
+  - { name: auth-stub,           image: auth,           port: 8600, logFile: auth.ndjson,
+      extraEnv: { SESSION_TTL_SEC: "3600" } }
+  - { name: cyber-posture-stub,  image: cyber-posture,  port: 8300, logFile: cyber-posture.ndjson }
+
+# pgse 의 승인 펌웨어 DB (ConfigMap 내용)
+approvedFirmware: |
+  {
+    "MPD-001": "sha256:0000000000000000000000000000000000000000000000000000000000000001"
+  }

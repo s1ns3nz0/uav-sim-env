@@ -1,0 +1,48 @@
+{{- with .Values.c4i }}
+{{- if .enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: c4i-stub
+  namespace: c4i
+  labels: { app: c4i-stub }
+spec:
+  selector: { app: c4i-stub }
+  ports: [ { name: http, port: {{ .port }}, targetPort: {{ .port }} } ]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: c4i-stub
+  namespace: c4i
+  labels: { app: c4i-stub }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: c4i-stub }
+  template:
+    metadata:
+      labels: { app: c4i-stub }
+    spec:
+      nodeSelector: { pool: {{ .nodePool }} }
+      containers:
+        - name: c4i-stub
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            - { name: LOG_FILE_PATH, value: /var/log/uav-sim-env/c4i.ndjson }
+          ports: [ { name: http, containerPort: {{ .port }} } ]
+          readinessProbe:
+            httpGet: { path: /health, port: {{ .port }} }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - { name: logs, mountPath: /var/log/uav-sim-env }
+          resources:
+            requests: { cpu: "50m", memory: 64Mi }
+            limits:   { cpu: "250m", memory: 128Mi }
+      volumes:
+        - name: logs
+          emptyDir: {}
+{{- end }}
+{{- end }}

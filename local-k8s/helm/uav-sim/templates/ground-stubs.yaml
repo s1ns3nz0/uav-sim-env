@@ -1,0 +1,70 @@
+# ground 스텁 N개를 단일 템플릿이 순회 생성 — Helm 을 쓰는 핵심 이득(DRY).
+# 새 스텁 추가 = values.yaml 의 groundStubs 에 한 줄. (pgse 만 ConfigMap 분기)
+{{- range .Values.groundStubs }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .name }}
+  namespace: ground
+  labels: { app: {{ .name }} }
+spec:
+  selector: { app: {{ .name }} }
+  ports: [ { name: http, port: {{ .port }}, targetPort: {{ .port }} } ]
+---
+{{- if .approvedFirmwareConfigMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .name }}-approved-firmware
+  namespace: ground
+data:
+  approved_firmware.json: |
+{{ $.Values.approvedFirmware | indent 4 }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}
+  namespace: ground
+  labels: { app: {{ .name }} }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: {{ .name }} }
+  template:
+    metadata:
+      labels: { app: {{ .name }} }
+    spec:
+      nodeSelector: { pool: system }
+      containers:
+        - name: {{ .name }}
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            - { name: LOG_FILE_PATH, value: /var/log/uav-sim-env/{{ .logFile }} }
+            {{- range $k, $v := .extraEnv }}
+            - { name: {{ $k }}, value: {{ $v | quote }} }
+            {{- end }}
+          ports: [ { name: http, containerPort: {{ .port }} } ]
+          readinessProbe:
+            httpGet: { path: /health, port: {{ .port }} }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - { name: logs, mountPath: /var/log/uav-sim-env }
+            {{- if .approvedFirmwareConfigMap }}
+            - { name: approved, mountPath: /data, readOnly: true }
+            {{- end }}
+          resources:
+            requests: { cpu: "50m", memory: 64Mi }
+            limits:   { cpu: "250m", memory: 128Mi }
+      volumes:
+        - name: logs
+          emptyDir: {}
+        {{- if .approvedFirmwareConfigMap }}
+        - name: approved
+          configMap: { name: {{ .name }}-approved-firmware }
+        {{- end }}
+---
+{{- end }}

@@ -79,6 +79,10 @@ step "[4/6] S3 주입 + SAR 캡처 (VM 내부 localhost)"
 # 여기서 S3(무결성/하이재킹/재밍) + SAR 프레임을 추가 발생.
 ssh "azureuser@$FQDN" bash -se <<'EOF'
 set -uo pipefail
+# 발사 전 서비스 ready 대기 — up -d 직후 uvicorn 미기동 레이스 방지.
+wait_health() { local i; for i in $(seq 1 30); do curl -s -o /dev/null --max-time 2 "$1" && return 0; sleep 1; done; return 1; }
+wait_health http://localhost:8800/health || echo "warn: datalink-satcom not ready"
+wait_health http://localhost:8700/health || echo "warn: sar-stub not ready"
 post() { curl -sS --max-time 5 -X POST "$1" -H 'content-type: application/json' -d "$2" || true; echo; }
 post http://localhost:8800/satcom/inject '{"type":"integrity","duration_sec":30}'
 post http://localhost:8800/satcom/inject '{"type":"hijack"}'

@@ -70,8 +70,33 @@ kubectl -n link exec deploy/datalink-satcom -- tail -n 2 /var/log/uav-sim-env/sa
 - **관리 ID 기반 AcrPull** — kind 는 `kind load` 로 이미지 주입(레지스트리 불필요).
 - **Multus 이중 인터페이스 / OpenSAND 물리계층** — 다음(최대 충실도) 단계.
 
-## 7. 다음 단계
+## 7. 현재 워크로드 / 다음 단계
 
-1. 나머지 compose 서비스(gcs-qgc, telemetry-tap 사이드카, 나머지 스텁) 매니페스트 추가.
-2. Multus 설치 + `net-los`/`net-satcom` NetworkAttachmentDefinition → av-muav 이중 인터페이스.
-3. 검증 끝나면 동일 매니페스트를 `dah-sim-aks`(Azure)로 그대로 `kubectl apply`.
+**배치 완료(매니페스트 존재):**
+
+| ns | 워크로드 |
+|---|---|
+| air | `av-muav` (StatefulSet) |
+| link | `datalink-satcom` |
+| ground | `mps-stub`, `pgse-stub`(+ConfigMap), `weapon-stub`, `ti-stub`, `auth-stub`, `cyber-posture-stub` |
+| c4i | `c4i-stub` |
+
+**보류(데이터패스 단계에서):** `datalink-los`·`telemetry-tap`·`gcs-qgc` 는 av↔datalink↔tap MAVLink 배선에 의존하므로, Multus 이중 링크 + OpenSAND 단계에서 함께 올린다(standalone 으로는 반쪽). 
+
+**다음 단계:**
+
+1. datalink 데이터패스 배선(av↔datalink↔telemetry-tap 사이드카) + `datalink-los`/`gcs-qgc` 매니페스트.
+2. 검증 끝나면 동일 매니페스트를 `dah-sim-aks`(Azure)로 그대로 `kubectl apply`.
+
+## 8. 이중 링크 PoC — Multus + netem (선택)
+
+av-muav 에 LOS/SATCOM 두 RF 링크를 **실제 별도 인터페이스**로 붙이고 링크별 지연/손실을 차등 적용한다. AKS 의 최대 리스크(Multus CNI)를 로컬에서 미리 검증.
+
+```bash
+bash enable-dual-link.sh      # Multus 설치 → NAD → av-muav 패치 → 검증
+```
+
+- `net-los`(10.70.0.0/24) / `net-satcom`(10.80.0.0/24) NetworkAttachmentDefinition.
+- av-muav 가 `eth0`(Calico) + `los` + `sat` 3개 인터페이스 보유.
+- netem: `los`=50ms, `sat`=600ms+2% loss → `sat` 게이트웨이 ping 이 ~10배 느림.
+- 되돌리기: `kubectl rollout undo statefulset/av-muav -n air` (또는 `bash down.sh` 후 재기동).

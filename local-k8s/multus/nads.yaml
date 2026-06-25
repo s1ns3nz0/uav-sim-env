@@ -1,0 +1,42 @@
+# NetworkAttachmentDefinition — av-muav 의 이중 RF 링크를 실제 별도 망으로.
+# net-los   : C-band LOS (저지연). bridge los0 / 10.70.0.0/24
+# net-satcom: Ku/Ka SATCOM (GEO). bridge sat0 / 10.80.0.0/24
+# netem(지연/손실)은 av-muav initContainer 가 인터페이스별로 적용한다(패치 파일 참고).
+# bridge/host-local CNI 는 kind 노드 이미지에 기본 포함(/opt/cni/bin).
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: net-los
+  namespace: air
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "name": "net-los",
+      "type": "bridge",
+      "bridge": "los0",
+      "isGateway": true,
+      "ipam": {
+        "type": "host-local",
+        "subnet": "10.70.0.0/24"
+      }
+    }
+---
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: net-satcom
+  namespace: air
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "name": "net-satcom",
+      "type": "bridge",
+      "bridge": "sat0",
+      "isGateway": true,
+      "ipam": {
+        "type": "host-local",
+        "subnet": "10.80.0.0/24"
+      }
+    }

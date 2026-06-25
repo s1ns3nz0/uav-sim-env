@@ -1,0 +1,257 @@
+# ground — 나머지 지상지원 스텁 (pgse/weapon/ti/auth/cyber-posture).
+# 모두 ground ns, system 노드풀. 자기완결적 REST 표면이라 데이터패스 의존 없음.
+# NetworkPolicy 는 podSelector {} (ns 전체)라 새 파드도 ground 정책을 자동 상속.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ===== pgse-stub (PGSE, S4 공급망 표면) — approved_firmware.json 은 ConfigMap =====
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgse-approved-firmware
+  namespace: ground
+data:
+  approved_firmware.json: |
+    {
+      "MPD-001": "sha256:0000000000000000000000000000000000000000000000000000000000000001"
+    }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgse-stub
+  namespace: ground
+  labels: { app: pgse-stub }
+spec:
+  selector: { app: pgse-stub }
+  ports:
+    - { name: http, port: 8000, targetPort: 8000 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgse-stub
+  namespace: ground
+  labels: { app: pgse-stub }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: pgse-stub }
+  template:
+    metadata:
+      labels: { app: pgse-stub }
+    spec:
+      nodeSelector: { pool: system }
+      containers:
+        - name: pgse-stub
+          image: uavsim/pgse:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: APPROVED_DB, value: /data/approved_firmware.json }
+            - { name: TOKEN_TTL_SEC, value: "300" }
+            - { name: LOG_FILE_PATH, value: /var/log/uav-sim-env/pgse.ndjson }
+            - { name: MAINT_FILE_PATH, value: /var/log/uav-sim-env/maintenance.ndjson }
+          ports: [ { name: http, containerPort: 8000 } ]
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - { name: approved, mountPath: /data, readOnly: true }
+            - { name: logs, mountPath: /var/log/uav-sim-env }
+          resources:
+            requests: { cpu: "50m", memory: 64Mi }
+            limits: { cpu: "250m", memory: 128Mi }
+      volumes:
+        - name: approved
+          configMap: { name: pgse-approved-firmware }
+        - name: logs
+          emptyDir: {}
+---
+# ===== weapon-stub (무장 통제) =====
+apiVersion: v1
+kind: Service
+metadata:
+  name: weapon-stub
+  namespace: ground
+  labels: { app: weapon-stub }
+spec:
+  selector: { app: weapon-stub }
+  ports:
+    - { name: http, port: 8400, targetPort: 8400 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weapon-stub
+  namespace: ground
+  labels: { app: weapon-stub }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: weapon-stub }
+  template:
+    metadata:
+      labels: { app: weapon-stub }
+    spec:
+      nodeSelector: { pool: system }
+      containers:
+        - name: weapon-stub
+          image: uavsim/weapon:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: LOG_FILE_PATH, value: /var/log/uav-sim-env/weapon.ndjson }
+          ports: [ { name: http, containerPort: 8400 } ]
+          readinessProbe:
+            httpGet: { path: /health, port: 8400 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - { name: logs, mountPath: /var/log/uav-sim-env }
+          resources:
+            requests: { cpu: "50m", memory: 64Mi }
+            limits: { cpu: "250m", memory: 128Mi }
+      volumes:
+        - name: logs
+          emptyDir: {}
+---
+# ===== ti-stub (Threat Intel) =====
+apiVersion: v1
+kind: Service
+metadata:
+  name: ti-stub
+  namespace: ground
+  labels: { app: ti-stub }
+spec:
+  selector: { app: ti-stub }
+  ports:
+    - { name: http, port: 8500, targetPort: 8500 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ti-stub
+  namespace: ground
+  labels: { app: ti-stub }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ti-stub }
+  template:
+    metadata:
+      labels: { app: ti-stub }
+    spec:
+      nodeSelector: { pool: system }
+      containers:
+        - name: ti-stub
+          image: uavsim/ti:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: LOG_FILE_PATH, value: /var/log/uav-sim-env/ti.ndjson }
+          ports: [ { name: http, containerPort: 8500 } ]
+          readinessProbe:
+            httpGet: { path: /health, port: 8500 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - { name: logs, mountPath: /var/log/uav-sim-env }
+          resources:
+            requests: { cpu: "50m", memory: 64Mi }
+            limits: { cpu: "250m", memory: 128Mi }
+      volumes:
+        - name: logs
+          emptyDir: {}
+---
+# ===== auth-stub (운영자 인증 감사) =====
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-stub
+  namespace: ground
+  labels: { app: auth-stub }
+spec:
+  selector: { app: auth-stub }
+  ports:
+    - { name: http, port: 8600, targetPort: 8600 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-stub
+  namespace: ground
+  labels: { app: auth-stub }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: auth-stub }
+  template:
+    metadata:
+      labels: { app: auth-stub }
+    spec:
+      nodeSelector: { pool: system }
+      containers:
+        - name: auth-stub
+          image: uavsim/auth:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: LOG_FILE_PATH, value: /var/log/uav-sim-env/auth.ndjson }
+            - { name: SESSION_TTL_SEC, value: "3600" }
+          ports: [ { name: http, containerPort: 8600 } ]
+          readinessProbe:
+            httpGet: { path: /health, port: 8600 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - { name: logs, mountPath: /var/log/uav-sim-env }
+          resources:
+            requests: { cpu: "50m", memory: 64Mi }
+            limits: { cpu: "250m", memory: 128Mi }
+      volumes:
+        - name: logs
+          emptyDir: {}
+---
+# ===== cyber-posture-stub (사이버위협태세) =====
+apiVersion: v1
+kind: Service
+metadata:
+  name: cyber-posture-stub
+  namespace: ground
+  labels: { app: cyber-posture-stub }
+spec:
+  selector: { app: cyber-posture-stub }
+  ports:
+    - { name: http, port: 8300, targetPort: 8300 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cyber-posture-stub
+  namespace: ground
+  labels: { app: cyber-posture-stub }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: cyber-posture-stub }
+  template:
+    metadata:
+      labels: { app: cyber-posture-stub }
+    spec:
+      nodeSelector: { pool: system }
+      containers:
+        - name: cyber-posture-stub
+          image: uavsim/cyber-posture:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - { name: LOG_FILE_PATH, value: /var/log/uav-sim-env/cyber-posture.ndjson }
+          ports: [ { name: http, containerPort: 8300 } ]
+          readinessProbe:
+            httpGet: { path: /health, port: 8300 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - { name: logs, mountPath: /var/log/uav-sim-env }
+          resources:
+            requests: { cpu: "50m", memory: 64Mi }
+            limits: { cpu: "250m", memory: 128Mi }
+      volumes:
+        - name: logs
+          emptyDir: {}

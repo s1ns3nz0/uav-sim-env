@@ -1,0 +1,6 @@
+apiVersion: v2
+name: uav-sim
+description: KUS-FS UAV SOC 시뮬레이션 평면 (air/link/ground/c4i/soc) — Helm 차트
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

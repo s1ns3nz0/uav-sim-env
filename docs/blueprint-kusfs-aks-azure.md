@@ -24,7 +24,12 @@
 > - **`av-muav` StatefulSet**(안정 식별, `kubectl scale`로 편대). entrypoint `--no-rebuild`로 런타임 재컴파일 OOM 해소.
 > - ADR-0002 MVP 코어(namespace+NetworkPolicy+StatefulSet+노드풀)가 로컬에서 선검증됨 → AKS 이전 리스크 감소. Multus/OpenSAND는 "최대 충실도" 단계.
 >
-> ⏳ 남은 것: ① OpenSAND DVB-S2/RCS2 물리계층 + av-muav MAVLink 위성 터널링(+ Multus 이중 인터페이스), ② `satcom.ndjson`/`sar.ndjson`을 VM AMA/DCR(ext2)에 ingest 연결 → 라이브 `UAVSatcomLink_CL` 채우기, ③ Phase 3 AKS(`dah-sim-aks`) 이전(C-트랙 매니페스트 재사용).
+> **구현 진행 상태 — 추가 완료 (2026-06-25):**
+> - **ingest ✅** — `satcom.ndjson`/`sar.ndjson` → VM AMA/DCR(ext2) → 라이브 `UAVSatcomLink_CL`/`UAVSarPayload_CL`. S3 공격(integrity/hijack/jam)이 Sentinel까지 완주 확인(`scripts/satcom-ingest.sh`).
+> - **C-확장 ✅** — ground 평면 스텁 5개(pgse+ConfigMap/weapon/ti/auth/cyber-posture) 매니페스트.
+> - **이중 링크 ✅ (Multus + netem)** — av-muav에 `net-los`/`net-satcom` 실제 별도 인터페이스 + 링크별 netem(LOS 50ms / SATCOM 600ms+loss) 로컬 검증(`enable-dual-link.sh`). **ADR 최대 리스크(Multus CNI) 로컬에서 제거.** 풀 OpenSAND 물리계층은 SOC 한계효용 대비 고비용이라 미채택(태깅 계층이 S3 메타 이미 제공).
+>
+> ⏳ 남은 것: **Phase 3 AKS(`dah-sim-aks`) 이전** — 검증된 `local-k8s/` 매니페스트 + `enable-dual-link.sh`를 Azure 클러스터에 재사용. (av↔datalink↔telemetry-tap MAVLink 데이터패스 정식 배선은 이전과 함께.)
 
 ---
 

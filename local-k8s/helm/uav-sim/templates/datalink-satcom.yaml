@@ -1,0 +1,52 @@
+{{- with .Values.datalinkSatcom }}
+{{- if .enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: datalink-satcom
+  namespace: link
+  labels: { app: datalink-satcom }
+spec:
+  selector: { app: datalink-satcom }
+  ports: [ { name: control, port: 8800, targetPort: 8800 } ]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: datalink-satcom
+  namespace: link
+  labels: { app: datalink-satcom }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: datalink-satcom }
+  template:
+    metadata:
+      labels: { app: datalink-satcom }
+    spec:
+      nodeSelector: { pool: {{ .nodePool }} }
+      tolerations:
+        - { key: dedicated, operator: Equal, value: satcom, effect: NoSchedule }
+      containers:
+        - name: datalink-satcom
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            {{- range $k, $v := .env }}
+            - { name: {{ $k }}, value: {{ $v | quote }} }
+            {{- end }}
+          ports: [ { name: control, containerPort: 8800 } ]
+          readinessProbe:
+            httpGet: { path: /health, port: 8800 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - { name: logs, mountPath: /var/log/uav-sim-env }
+          resources:
+            requests: { cpu: "100m", memory: 128Mi }
+            limits:   { cpu: "500m", memory: 256Mi }
+      volumes:
+        - name: logs
+          emptyDir: {}
+{{- end }}
+{{- end }}

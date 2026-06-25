@@ -45,6 +45,12 @@ build_load uavsim/av:local              "$REPO/av-mpd"
 build_load uavsim/datalink-satcom:local "$REPO/datalink-satcom"
 build_load uavsim/mps:local             "$REPO/mps-stub"
 build_load uavsim/c4i:local             "$REPO/c4i-stub"
+# ground 스텁 (C-확장)
+build_load uavsim/pgse:local            "$REPO/pgse-stub"
+build_load uavsim/weapon:local          "$REPO/weapon-stub"
+build_load uavsim/ti:local              "$REPO/ti-stub"
+build_load uavsim/auth:local            "$REPO/auth-stub"
+build_load uavsim/cyber-posture:local   "$REPO/cyber-posture-stub"
 
 echo "==> [5/5] 매니페스트 적용 (namespaces → NetworkPolicy → 워크로드)"
 kubectl apply -f "$HERE/manifests/"

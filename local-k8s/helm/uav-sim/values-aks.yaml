@@ -1,0 +1,6 @@
+# AKS 환경 오버라이드 — kind 대비 이미지 출처만 다름.
+# E1 배포 후 ACR loginServer 로 registry 를 바꾸고, E2 에서 :v1 로 push.
+image:
+  registry: dahsimacr2kv7vfcrafu3o.azurecr.io   # dah-sim-rg 의 ACR (sim.bicep 출력)
+  tag: v1
+  pullPolicy: IfNotPresent

@@ -1,0 +1,91 @@
+# 각 ns: default-deny + allow-dns (반복 → range 로 DRY)
+{{- range .Values.namespaces }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: default-deny, namespace: {{ .name }} }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: allow-dns, namespace: {{ .name }} }
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+{{- end }}
+# 신뢰경계 체인 (air → link → ground → c4i) + soc 관측 (정적)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: air-egress-to-link, namespace: air }
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to: [ { namespaceSelector: { matchLabels: { plane: link } } } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: link-ingress-from-air, namespace: link }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [ { namespaceSelector: { matchLabels: { plane: air } } } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: link-egress-to-ground, namespace: link }
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to: [ { namespaceSelector: { matchLabels: { plane: ground } } } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: ground-ingress-from-link, namespace: ground }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [ { namespaceSelector: { matchLabels: { plane: link } } } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: ground-egress-to-c4i, namespace: ground }
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to: [ { namespaceSelector: { matchLabels: { plane: c4i } } } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: c4i-ingress-from-ground, namespace: c4i }
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from: [ { namespaceSelector: { matchLabels: { plane: ground } } } ]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: soc-egress-observe, namespace: soc }
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchExpressions:
+              - { key: plane, operator: In, values: [air, link, ground, c4i] }

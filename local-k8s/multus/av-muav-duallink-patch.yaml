@@ -1,0 +1,29 @@
+# av-muav 에 이중 인터페이스(los/sat) + 링크별 netem 을 더하는 strategic-merge 패치.
+#
+# - annotation: Multus 가 net-los@los, net-satcom@sat 인터페이스를 Pod 에 붙임.
+# - initContainer netem-setup: root + NET_ADMIN 로 공유 netns 에 tc netem 적용.
+#   (메인 sitl 컨테이너는 비root 라 직접 tc 불가 → init 이 깔면 그대로 물려받음)
+spec:
+  template:
+    metadata:
+      annotations:
+        k8s.v1.cni.cncf.io/networks: net-los@los, net-satcom@sat
+    spec:
+      initContainers:
+        - name: netem-setup
+          image: uavsim/av:local
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            capabilities:
+              add: ["NET_ADMIN"]
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              # Multus 인터페이스가 붙을 때까지 잠깐 대기
+              for i in $(seq 1 10); do ip link show los >/dev/null 2>&1 && break; sleep 1; done
+              # LOS = 저지연 C-band, SATCOM = GEO ~600ms + 손실
+              tc qdisc replace dev los root netem delay 50ms 5ms distribution normal || true
+              tc qdisc replace dev sat root netem delay 600ms 50ms distribution normal loss 2% || true
+              echo "[netem-setup] interfaces:"; ip -br addr
+              echo "[netem-setup] qdiscs:";    tc qdisc show
