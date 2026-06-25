@@ -12,6 +12,16 @@ metadata:
   annotations:
     azure.workload.identity/client-id: {{ .clientId | quote }}
 ---
+# soc default-deny 예외 — Fluent Bit 는 443으로 kube API 서버 + DCE(Logs Ingestion)에 나가야 함
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: fluentbit-egress, namespace: soc }
+spec:
+  podSelector: { matchLabels: { app: fluentbit } }
+  policyTypes: [Egress]
+  egress:
+    - ports: [ { protocol: TCP, port: 443 } ]
+---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata: { name: uav-fluentbit }
@@ -68,7 +78,7 @@ data:
         tenant_id        {{ $.Values.fluentBit.tenantId }}
         dce_url          {{ $.Values.fluentBit.dceUrl }}
         dcr_id           {{ .dcrId }}
-        stream_name      {{ .stream }}
+        table_name       {{ .stream }}
         time_key         TimeGenerated
         time_generated   true
     {{- end }}
