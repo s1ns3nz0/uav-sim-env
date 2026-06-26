@@ -12,6 +12,7 @@ telemetryTap:
   nodePool: sitl                 # system 풀 maxPods=30 회피
   stdoutMode: true               # 7 NDJSON 전부 /dev/stdout → FB tail 가능
   imageTag: v5                   # Stream<Name> 값 string (rewrite_tag regex 매칭 안정)
+  uavId: "MUAV-AKS-001"          # AKS 출처 분리 (datalink-satcom 과 동일)
 gcsQgc:       { enabled: true }
 fluentBit:    { enabled: true }   # AKS NDJSON → Sentinel 일원화
 ingress:      { enabled: true }   # https://sim.pollak.store (cert-manager + ingress-nginx)
