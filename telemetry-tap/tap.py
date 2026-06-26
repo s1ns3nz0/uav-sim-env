@@ -187,7 +187,7 @@ def _emit_mission_event(event_name: str, record: dict[str, Any], **extras: Any) 
         "Lat": _last_position["Lat"],
         "Lon": _last_position["Lon"],
         "AltMSL_m": _last_position["AltMSL_m"],
-        "StreamMission": 1,
+        "StreamMission": "mission",
         **extras,
     }
     _mission_file_handle.write(json.dumps(payload, separators=(",", ":"), default=str) + "\n")
@@ -258,7 +258,7 @@ def _maybe_emit_failsafe(record: dict[str, Any]) -> None:
                 "EventType": "statustext_warning",
                 "Severity": severity,
                 "Text": record.get("Text"),
-                "StreamFailsafe": 1,
+                "StreamFailsafe": "failsafe",
             }
     elif msg_type == "HEARTBEAT":
         current = record.get("CustomMode")
@@ -270,7 +270,7 @@ def _maybe_emit_failsafe(record: dict[str, Any]) -> None:
                 "ModeBefore": _last_mode,
                 "ModeAfter": current,
                 "Severity": 4,
-                "StreamFailsafe": 1,
+                "StreamFailsafe": "failsafe",
             }
     if payload is None:
         return
@@ -296,7 +296,7 @@ def _maybe_emit_config_audit(record: dict[str, Any]) -> None:
         "ParamValueBefore": previous,
         "ParamValueAfter": new_value,
         "Source": "sitl",
-        "StreamConfigAudit": 1,
+        "StreamConfigAudit": "config-audit",
     }
     _param_state[param_id] = new_value
     _config_audit_file_handle.write(json.dumps(payload, separators=(",", ":"), default=str) + "\n")
@@ -311,7 +311,7 @@ def _maybe_emit_imagery(record: dict[str, Any]) -> None:
         "UAVId": record.get("UAVId"),
         "EventType": record.get("MsgType", "").lower(),
         "MsgType": record.get("MsgType"),
-        "StreamImagery": 1,
+        "StreamImagery": "imagery",
     }
     _imagery_file_handle.write(json.dumps(payload, separators=(",", ":"), default=str) + "\n")
     _imagery_file_handle.flush()
@@ -337,7 +337,7 @@ def _maybe_emit_mavsec(msg: Any, record: dict[str, Any]) -> None:
         "UnsignedCount": _mavsec_unsigned,
         "FailedCount": 0,
         "WindowSec": MAVSEC_INTERVAL_SEC,
-        "StreamMavsec": 1,
+        "StreamMavsec": "mavsec",
     }
     _mavsec_file_handle.write(json.dumps(payload, separators=(",", ":"), default=str) + "\n")
     _mavsec_file_handle.flush()
@@ -348,7 +348,7 @@ def _maybe_emit_mavsec(msg: Any, record: dict[str, Any]) -> None:
 
 def _emit(record: dict[str, Any]) -> None:
     """Serialize a record as a single-line JSON document on stdout (and file sinks)."""
-    record["StreamTelemetry"] = 1
+    record["StreamTelemetry"] = "telemetry"
     line = json.dumps(record, separators=(",", ":"), default=str) + "\n"
     sys.stdout.write(line)
     sys.stdout.flush()
@@ -377,7 +377,7 @@ def _emit(record: dict[str, Any]) -> None:
             "Param4": record.get("Param4"),
             "Result": record.get("Result"),
             "Seq": record.get("Seq"),
-            "StreamOperator": 1,
+            "StreamOperator": "operator",
         }
         op_line = json.dumps(op_record, separators=(",", ":"), default=str) + "\n"
         _operator_file_handle.write(op_line)
