@@ -10,6 +10,7 @@ datalinkLos:  { enabled: true }
 telemetryTap: { enabled: true }
 gcsQgc:       { enabled: true }
 fluentBit:    { enabled: true }   # AKS NDJSON → Sentinel 일원화
+ingress:      { enabled: true }   # https://sim.pollak.store (cert-manager + ingress-nginx)
 
 # AKS 출처를 표에서 구별하기 위해 UAV_ID 를 다르게 (검증용)
 datalinkSatcom:

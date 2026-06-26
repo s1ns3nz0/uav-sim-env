@@ -1,0 +1,47 @@
+{{- with .Values.ingress }}
+{{- if .enabled }}
+# Let's Encrypt 발급자 (HTTP-01, ingress-nginx 경유). cert-manager 설치 후 적용.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: {{ .email | quote }}
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - http01:
+          ingress:
+            class: nginx
+---
+# gcs-qgc(noVNC) 를 https://<host> 로 TLS 종단. WebSocket(noVNC) 위해 타임아웃 상향.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gcs-qgc
+  namespace: ground
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - {{ .host | quote }}
+      secretName: gcs-qgc-tls
+  rules:
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gcs-qgc
+                port:
+                  number: 8080
+{{- end }}
+{{- end }}

@@ -109,3 +109,9 @@ fluentBit:
   streams:
     # container_name 별 → DCR + stream. marker = 그 컴포넌트 레코드만 거르는 필수 필드.
     - { container: datalink-satcom, dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVSatcomLink", marker: "LinkId" }
+
+# HTTPS Ingress (ingress-nginx + cert-manager 설치 후 enable). 기본 off(kind).
+ingress:
+  enabled: false
+  host: sim.pollak.store
+  email: fjybjinsu2388@gmail.com    # Let's Encrypt 만료알림용 (변경 가능)
