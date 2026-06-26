@@ -1,7 +1,7 @@
 # HANDOFF → Claude Code
 
 이 문서는 진행 중인 작업을 Claude Code가 이어받기 위한 **컨텍스트 + 현재 블로커 + 잔여 로드맵**이다.
-바로 다음 작업(권장): **테스트 비행으로 트래픽 시작 → §4-1 의 6개 신규 stream 도착 검증 → batch2(pgse 분기/telemetry-tap/sar) 진행 → VM 폐기**.
+바로 다음 작업(권장): **테스트 비행으로 트래픽 시작 → §4-1 의 8개 신규 stream 도착 검증 → batch3(telemetry-tap 7테이블/sar) 진행 → VM 폐기**.
 
 ---
 
@@ -86,22 +86,27 @@ az network lb probe list -g dah-sim-rg-aks-nodes --lb-name kubernetes \
 - `datalink-satcom` (H3a, ext2 DCR → `UAVSatcomLink_CL`).
 - 노드 재배치: `ground stubs` / `c4i-stub` / `telemetry-tap` 가 system 풀(maxPods=30) 꽉 차서 21h Pending 이었음 → `sitl` 풀로 옮김. `values-aks.yaml` 의 `groundStubsNodePool`, `c4i.nodePool`, `telemetryTap.nodePool` = `sitl`.
 - `LOG_FILE_PATH=/dev/stdout` 토글: `groundStubsLogToStdout=true` + `c4i.logPath=/dev/stdout` (없으면 NDJSON 이 emptyDir 파일에만 쓰여 FB tail 가 못 잡음).
-- **6개 신규 stream 등록 (FB plugin init 정상, 7번 OUTPUT 다 떠있음)**: `mps-stub→UAVMissionPlan(PlanId)`, `c4i-stub→UAVC4I(OrderId)`, `weapon-stub→UAVWeapon(SafetyState)`, `cyber-posture-stub→UAVCyberPosture(Level)`, `ti-stub→UAVThreatIntel(Indicator)`, `auth-stub→UAVOpAudit(SessionId)`. extras 마커는 `infra/sentinel/dcr-extras.bicep` 의 streamColumns 에서 컴포넌트-고유 필드 선택.
+- **8개 신규 stream 등록 (FB plugin init 정상, OUTPUT 9개 다 떠있음)**: 
+  - 단순 6개: `mps-stub→UAVMissionPlan(PlanId)`, `c4i-stub→UAVC4I(OrderId)`, `weapon-stub→UAVWeapon(SafetyState)`, `cyber-posture-stub→UAVCyberPosture(Level)`, `ti-stub→UAVThreatIntel(Indicator)`, `auth-stub→UAVOpAudit(SessionId)`.
+  - pgse 분기 2개(같은 컨테이너 → 2 stream): `pgse-stub→UAVPgse(ImageHashSubmitted, primary)`, `pgse-stub→UAVMaintenance(BatteryId, extras)`. `MAINT_FILE_PATH=/dev/stdout` 으로 두 NDJSON 이 같은 stdout 에 섞여 흐름. `ImageHashSubmitted`/`BatteryId` 가 상대 stream 에 절대 안 나오는 유일 필드라 grep 안전.
+  - 차트 fluentbit Tag 를 `s_{container}_{stream}.*` 로 변경 → 동일 container 다중 stream 라우팅 가능.
 - FB DS `nodeAffinity: pool ∈ {sitl, satcom}` → system 풀 Pending 해소 (DESIRED=2, 2/2 Running).
 
 ⏳ 트래픽 대기:
-- 6개 stub 은 외부 호출이 와야 NDJSON 발행(현재 health probe 외 트래픽 0). 사용자가 테스트 비행 시작하면 자연스럽게 흘러감. KQL 로 도착 확인:
+- 8개 stub 은 외부 호출이 와야 NDJSON 발행(현재 health probe 외 트래픽 0). 사용자가 테스트 비행 시작하면 자연스럽게 흘러감. KQL 로 도착 확인:
   ```kql
   union UAVMissionPlan_CL, UAVC4I_CL, UAVWeapon_CL, UAVCyberPosture_CL,
-        UAVThreatIntel_CL, UAVOpAudit_CL
+        UAVThreatIntel_CL, UAVOpAudit_CL, UAVPgse_CL, UAVMaintenance_CL
   | where TimeGenerated > ago(1h)
   | summarize count() by Type
   ```
 
-🟨 Batch2 남음:
-- **pgse-stub**: 단일 컨테이너 → `UAVPgse`(Found/Passed) + `UAVMaintenance` 2 테이블 분기. 두 NDJSON 이 같은 stdout 으로 섞여 나오므로 marker 만으로 라우팅 가능. `streams` 에 같은 container 2 줄(marker 가 다름) 추가 — INPUT tail 은 2개 떠도 동일 파일 읽어 양쪽 grep 이 각자 거름.
-- **telemetry-tap**: 1 컨테이너 → 7 파일 → 7 테이블 (telemetry/operator/mission/failsafe/config-audit/imagery/mavsec). 내용 기반 분기 — 위와 같은 패턴(같은 container 다 marker 7개). 각 NDJSON 의 고유 필드 확인 필요.
-- **sar-stub**: AKS 차트에 미배포. 추가 → `UAVSarPayload`, marker `FrameId`, DCR ext2 (`dcr-1aad0b1c…`).
+🟨 Batch3 남음:
+- **telemetry-tap**: 1 컨테이너 → 7 파일 → 7 테이블 (telemetry/operator/mission/failsafe/config-audit/imagery/mavsec). 7 LOG_*_FILE_PATH env 를 전부 `/dev/stdout` 으로 override (현재 차트는 emptyDir 파일). marker 어려운 점:
+  - `UAVOperator` ← `ActionName`, `UAVMissionEvent` ← `EventName`, `UAVConfigAudit` ← `ParamId`, `UAVMavsec` ← `SignedCount`/`WindowSec`, `UAVFailsafe` ← `ModeBefore`/`Severity` 는 unique 필드 있음.
+  - **`UAVImagery`(컬럼: TimeGenerated/UAVId/EventType/MsgType) 는 unique 필드 없음** — `EventType` 값(예: `imagery_capture`)으로 grep regex 매칭하거나, telemetry-tap 소스(`./telemetry-tap/`) 에 stream 식별 키 한 줄 추가가 필요. 코드 1줄 추가가 가장 깔끔.
+  - **`UAVTelemetry`** 도 telemetry NDJSON 의 공통 unique 필드가 없음 (`MsgType` 은 operator/mission/imagery 와 겹침) → `Exclude` 패턴 또는 코드 stream 키 추가.
+- **sar-stub**: ACR `dahsimacr2kv7vfcrafu3o` 에 **`sar` 이미지 미존재**. 소스는 `./sar-stub/`. 빌드 → push → 차트 추가(neon ground 또는 air ns 결정 필요, 컴포넌트 위치는 docker-compose 의 `uas-los` 네트워크 기준) → stream `UAVSarPayload` / marker `FrameId` / DCR ext2 (`dcr-1aad0b1c…`).
 
 🎯 VM 폐기 (모든 stream 도착 검증 후):
 - `az vm deallocate -g dah-sim-rg -n uavsim-vm` (또는 삭제).
