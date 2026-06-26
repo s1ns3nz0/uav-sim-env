@@ -1,7 +1,7 @@
 # HANDOFF → Claude Code
 
 이 문서는 진행 중인 작업을 Claude Code가 이어받기 위한 **컨텍스트 + 현재 블로커 + 잔여 로드맵**이다.
-바로 다음 작업(권장): **§4-1 Sentinel 완전 일원화(H3b) → VM 폐기**. HTTPS 블로커는 해소됨(§3).
+바로 다음 작업(권장): **테스트 비행으로 트래픽 시작 → §4-1 의 6개 신규 stream 도착 검증 → batch2(pgse 분기/telemetry-tap/sar) 진행 → VM 폐기**.
 
 ---
 
@@ -79,22 +79,33 @@ az network lb probe list -g dah-sim-rg-aks-nodes --lb-name kubernetes \
 ## 4. 잔여 로드맵 (선택, 우선순위 낮음)
 
 ### 4-1. Sentinel 완전 일원화 (VM 폐기 목표) — `H3b`
-`local-k8s/helm/uav-sim/values.yaml` 의 `fluentBit.streams` 리스트에 컴포넌트별로 한 줄씩 추가.
-**중요**: 플러그인이 `table_name` 앞에 `Custom-` 를 자동으로 붙이므로 `stream` 값엔 접두어 없이 넣는다(예: `UAVSatcomLink`). `marker` = 그 컴포넌트 NDJSON에만 있는 필드(uvicorn 로그 거르기용).
 
-단일파일 컴포넌트 (primary DCR `dcr-5c6adbef...`):
-| container | stream(table_name) | marker |
-|---|---|---|
-| mps-stub | `UAVMissionPlan` | `PlanId` |
-| c4i-stub | `UAVC4I` | `OrderId` 또는 `EventType` |
-| cyber-posture-stub | `UAVCyberPosture` | `Level` |
-| weapon-stub | `UAVWeapon` | `SafetyState` |
-| pgse-stub | `UAVPgse` | `Found`/`Passed` (단 pgse는 maintenance.ndjson→`UAVMaintenance`로도 분기 = 2테이블, 내용 라우팅 필요) |
+**진행 상태 (2026-06-26):**
 
-extras DCR(`dcr-3fcc15a7...`) 매핑은 `infra/sentinel/dcr-extras.bicep` 읽어서 확인 (ti→`UAVThreatIntel`, auth→`UAVOpAudit` 등).
-**까다로운 부분**: `telemetry-tap`은 7파일→7테이블(telemetry/operator/mission/failsafe/config-audit/imagery/mavsec) 팬아웃 → 컨테이너 단일 라우팅 불가, 내용 기반 분기 필요. `sar-stub`은 **AKS 차트에 미배포**(추가 필요, `UAVSarPayload`, marker `FrameId`, DCR ext2).
-**노드 정리**: `system` 노드 maxPods(30) 꽉 참 → ground 스텁/c4i 를 `sitl` 노드풀로 옮기면(values의 nodePool) FB가 sitl/satcom 2노드로 전부 커버, system FB Pending 무의미해짐.
-일원화 검증 후 **VM 폐기**: `az vm deallocate -g dah-sim-rg -n uavsim-vm` (또는 삭제). **주의: `dah-sim-rg` 통째 삭제 금지(AKS도 거기 있음).**
+✅ 완료:
+- `datalink-satcom` (H3a, ext2 DCR → `UAVSatcomLink_CL`).
+- 노드 재배치: `ground stubs` / `c4i-stub` / `telemetry-tap` 가 system 풀(maxPods=30) 꽉 차서 21h Pending 이었음 → `sitl` 풀로 옮김. `values-aks.yaml` 의 `groundStubsNodePool`, `c4i.nodePool`, `telemetryTap.nodePool` = `sitl`.
+- `LOG_FILE_PATH=/dev/stdout` 토글: `groundStubsLogToStdout=true` + `c4i.logPath=/dev/stdout` (없으면 NDJSON 이 emptyDir 파일에만 쓰여 FB tail 가 못 잡음).
+- **6개 신규 stream 등록 (FB plugin init 정상, 7번 OUTPUT 다 떠있음)**: `mps-stub→UAVMissionPlan(PlanId)`, `c4i-stub→UAVC4I(OrderId)`, `weapon-stub→UAVWeapon(SafetyState)`, `cyber-posture-stub→UAVCyberPosture(Level)`, `ti-stub→UAVThreatIntel(Indicator)`, `auth-stub→UAVOpAudit(SessionId)`. extras 마커는 `infra/sentinel/dcr-extras.bicep` 의 streamColumns 에서 컴포넌트-고유 필드 선택.
+- FB DS `nodeAffinity: pool ∈ {sitl, satcom}` → system 풀 Pending 해소 (DESIRED=2, 2/2 Running).
+
+⏳ 트래픽 대기:
+- 6개 stub 은 외부 호출이 와야 NDJSON 발행(현재 health probe 외 트래픽 0). 사용자가 테스트 비행 시작하면 자연스럽게 흘러감. KQL 로 도착 확인:
+  ```kql
+  union UAVMissionPlan_CL, UAVC4I_CL, UAVWeapon_CL, UAVCyberPosture_CL,
+        UAVThreatIntel_CL, UAVOpAudit_CL
+  | where TimeGenerated > ago(1h)
+  | summarize count() by Type
+  ```
+
+🟨 Batch2 남음:
+- **pgse-stub**: 단일 컨테이너 → `UAVPgse`(Found/Passed) + `UAVMaintenance` 2 테이블 분기. 두 NDJSON 이 같은 stdout 으로 섞여 나오므로 marker 만으로 라우팅 가능. `streams` 에 같은 container 2 줄(marker 가 다름) 추가 — INPUT tail 은 2개 떠도 동일 파일 읽어 양쪽 grep 이 각자 거름.
+- **telemetry-tap**: 1 컨테이너 → 7 파일 → 7 테이블 (telemetry/operator/mission/failsafe/config-audit/imagery/mavsec). 내용 기반 분기 — 위와 같은 패턴(같은 container 다 marker 7개). 각 NDJSON 의 고유 필드 확인 필요.
+- **sar-stub**: AKS 차트에 미배포. 추가 → `UAVSarPayload`, marker `FrameId`, DCR ext2 (`dcr-1aad0b1c…`).
+
+🎯 VM 폐기 (모든 stream 도착 검증 후):
+- `az vm deallocate -g dah-sim-rg -n uavsim-vm` (또는 삭제).
+- **주의: `dah-sim-rg` 통째 삭제 금지(AKS도 거기).**
 
 ### 4-2. 정리/위생
 - SP 시크릿 로테이션: `az ad app credential reset --id ba886feb-...` → k8s secret `soc/fluentbit-azure` 갱신.
@@ -110,6 +121,7 @@ extras DCR(`dcr-3fcc15a7...`) 매핑은 `infra/sentinel/dcr-extras.bicep` 읽어
 - AKS 노드 vCPU 쿼터 8 → D2s_v5×3(6vCPU). 편대/노드 증설 시 쿼터 증액 필요.
 - **Azure LoadBalancer + ingress-nginx의 함정**: `externalTrafficPolicy=Cluster` 면 Azure cloud-provider 가 LB rule probe를 **HTTP path `/`** 로 자동 설정 → controller default backend 404 → unhealthy → 외부 traffic drop. `Local` 로 바꾸면 `healthCheckNodePort` + `/healthz` 가 자동 와이어링되어 해결. (그래서 같은 LB의 다른 svc 가 TCP probe 면 잘 동작해도 ingress 룰만 죽는 비대칭이 나옴.)
 - **cert-manager HTTP-01 + default-deny NP**: solver pod label = `acme.cert-manager.io/http01-solver=true`, port `8089`. ingress-nginx ns 에서 그 selector 로의 인입을 명시적으로 열어야 challenge 통과. challenge 영구 `pending` 이면 거의 NP.
+- **stub NDJSON 은 기본 emptyDir 파일에 쓰임**: `LOG_FILE_PATH=/var/log/uav-sim-env/{name}.ndjson` 가 default. Fluent Bit 가 kubelet `/var/log/containers/*.log` 만 tail 하므로 그대로 두면 일원화 못 함. `/dev/stdout` 으로 override 필수(H3a satcom 패턴). 또 uvicorn 평문 로그가 같이 섞이지만 grep filter (`marker .+`) 가 JSON-only 로 거름.
 
 ## 6. 진단 스크립트
 
