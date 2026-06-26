@@ -34,7 +34,11 @@
 >
 > **데이터패스 + GCS 외부노출 ✅ (2026-06-25).** `datalink-los`·`telemetry-tap`·`gcs-qgc`를 Helm으로 추가, av-muav SITL ClusterIP(`av-muav-mav`) + datalink-los DNS-resolve conf(`GEN_CONF` 게이트, compose 무영향) + air↔link·link→soc NetworkPolicy 예외로 **av→datalink-los→gcs-qgc MAVLink 데이터패스 완주**(라우터 Handled 19460msg, QGC에 차량 표시). `gcs-qgc-lb`(LoadBalancer) **공인 IP `20.249.193.191`** → `sim.pollak.store` 컷오버 대상.
 >
-> ⏳ 선택 잔여: ① 도메인 DNS 컷오버(sim.pollak.store → LB) + VM gcs 중지, ② Multus 이중링크 AKS판(kind에서 검증 완료), ③ OpenSAND 물리계층(한계효용 낮음).
+> **도메인 컷오버 ✅** — `sim.pollak.store` A레코드 → AKS LB(`20.249.193.191`), VM gcs profile 분리.
+>
+> **AKS→Sentinel 일원화 (H-트랙) — 핵심 회선 증명 ✅ (2026-06-26).** 목표: AKS를 단일 진실원으로 만들어 VM 폐기. 구현: 컴포넌트 NDJSON→stdout → **Fluent Bit DaemonSet**(soc, `fluentbit.yaml`) → **Azure Logs Ingestion API**(서비스 프린시플 `uav-fluentbit-sp` + Monitoring Metrics Publisher on dah-data-rg) → 기존 DCR → `UAV*_CL`. **datalink-satcom→`UAVSatcomLink_CL` 검증 완료**(`MUAV-AKS-001` 20행, http 204). 교훈: 이 Fluent Bit 플러그인(v3.2.2)은 워크로드 ID 미지원→SP 필요, `table_name`에 `Custom-` 자동 접두(값은 접두어 없이).
+>
+> ⏳ 일원화 잔여: ① 나머지 컴포넌트 stream 매핑(sar/스텁/c4i/telemetry-tap 7분기) + system 노드 maxPods 위해 컴포넌트를 sitl/satcom로 재배치, ② VM 폐기. / 그 외 선택: Multus 이중링크 AKS판(kind 검증 완료), OpenSAND(한계효용 낮음).
 
 ---
 
