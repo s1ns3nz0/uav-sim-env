@@ -1,7 +1,7 @@
 # HANDOFF → Claude Code
 
 이 문서는 진행 중인 작업을 Claude Code가 이어받기 위한 **컨텍스트 + 현재 블로커 + 잔여 로드맵**이다.
-바로 다음 작업(권장): **테스트 비행으로 트래픽 시작 → §4-1 의 8개 신규 stream 도착 검증 → batch3(telemetry-tap 7테이블/sar) 진행 → VM 폐기**.
+바로 다음 작업(권장): **테스트 비행으로 트래픽 시작 → 17개 stream 도착량 검증 → VM 폐기**. H3b 인프라(파이프) 완성됨.
 
 ---
 
@@ -101,12 +101,17 @@ az network lb probe list -g dah-sim-rg-aks-nodes --lb-name kubernetes \
   | summarize count() by Type
   ```
 
-🟨 Batch3 남음:
-- **telemetry-tap**: 1 컨테이너 → 7 파일 → 7 테이블 (telemetry/operator/mission/failsafe/config-audit/imagery/mavsec). 7 LOG_*_FILE_PATH env 를 전부 `/dev/stdout` 으로 override (현재 차트는 emptyDir 파일). marker 어려운 점:
-  - `UAVOperator` ← `ActionName`, `UAVMissionEvent` ← `EventName`, `UAVConfigAudit` ← `ParamId`, `UAVMavsec` ← `SignedCount`/`WindowSec`, `UAVFailsafe` ← `ModeBefore`/`Severity` 는 unique 필드 있음.
-  - **`UAVImagery`(컬럼: TimeGenerated/UAVId/EventType/MsgType) 는 unique 필드 없음** — `EventType` 값(예: `imagery_capture`)으로 grep regex 매칭하거나, telemetry-tap 소스(`./telemetry-tap/`) 에 stream 식별 키 한 줄 추가가 필요. 코드 1줄 추가가 가장 깔끔.
-  - **`UAVTelemetry`** 도 telemetry NDJSON 의 공통 unique 필드가 없음 (`MsgType` 은 operator/mission/imagery 와 겹침) → `Exclude` 패턴 또는 코드 stream 키 추가.
-- **sar-stub**: ACR `dahsimacr2kv7vfcrafu3o` 에 **`sar` 이미지 미존재**. 소스는 `./sar-stub/`. 빌드 → push → 차트 추가(neon ground 또는 air ns 결정 필요, 컴포넌트 위치는 docker-compose 의 `uas-los` 네트워크 기준) → stream `UAVSarPayload` / marker `FrameId` / DCR ext2 (`dcr-1aad0b1c…`).
+✅ Batch3 도 완료:
+- **telemetry-tap 7 stream + sar-stub 1 stream 추가**. 총 OUTPUT 17개 다 init + telemetry/operator/mission/config-audit/mavsec 실제 204 확인.
+- **차트 fluentbit 구조 변경 (핵심)**: 같은 path 의 multi-INPUT 등록은 fluent-bit tail 에서 첫 매칭조차 못 함(Inotify Off/per-INPUT DB 등 다 시도 후 확인). → `range .streams` 를 container 별 grouping 후 container 마다 INPUT 1번 + `rewrite_tag` filter rule 로 stream Tag 분기. INPUT 수가 stream 수 → container 수로 축소되고, 같은 container 의 multi-stream 도 안전.
+- **rewrite_tag value 타입 함정**: `Rule $KEY .+ NEW_TAG false` 에서 KEY 의 value 가 **integer 면 `.+` 매칭 실패**. value 를 string 으로 두면 매칭 성공. (telemetry-tap 의 7 marker 키 값을 `1` → `"telemetry"`/`"operator"`/… 로 변경. v5 이미지.)
+- **sar-stub**: `./sar-stub/` 빌드(`sar:v1`) → ACR push → ground-stubs 한 줄 추가(`{name: sar-stub, image: sar, port: 8700, ...}`) → stream `UAVSarPayload(FrameId)`, ext2 DCR.
+
+🟨 트래픽 들어와야 검증되는 것:
+- `UAVFailsafe`/`UAVImagery` 는 mavlink STATUSTEXT(warning) / CAMERA_TRIGGER 등 특정 이벤트가 발생해야 NDJSON 생성. 일반 telemetry 흐름엔 안 옴 → 비행 시나리오 트리거 필요.
+- ground/c4i 6 stub + sar 는 외부 API 호출이 와야 NDJSON.
+
+위 둘 다 트래픽 측면이고 인프라 측은 정상.
 
 🎯 VM 폐기 (모든 stream 도착 검증 후):
 - `az vm deallocate -g dah-sim-rg -n uavsim-vm` (또는 삭제).
@@ -127,6 +132,8 @@ az network lb probe list -g dah-sim-rg-aks-nodes --lb-name kubernetes \
 - **Azure LoadBalancer + ingress-nginx의 함정**: `externalTrafficPolicy=Cluster` 면 Azure cloud-provider 가 LB rule probe를 **HTTP path `/`** 로 자동 설정 → controller default backend 404 → unhealthy → 외부 traffic drop. `Local` 로 바꾸면 `healthCheckNodePort` + `/healthz` 가 자동 와이어링되어 해결. (그래서 같은 LB의 다른 svc 가 TCP probe 면 잘 동작해도 ingress 룰만 죽는 비대칭이 나옴.)
 - **cert-manager HTTP-01 + default-deny NP**: solver pod label = `acme.cert-manager.io/http01-solver=true`, port `8089`. ingress-nginx ns 에서 그 selector 로의 인입을 명시적으로 열어야 challenge 통과. challenge 영구 `pending` 이면 거의 NP.
 - **stub NDJSON 은 기본 emptyDir 파일에 쓰임**: `LOG_FILE_PATH=/var/log/uav-sim-env/{name}.ndjson` 가 default. Fluent Bit 가 kubelet `/var/log/containers/*.log` 만 tail 하므로 그대로 두면 일원화 못 함. `/dev/stdout` 으로 override 필수(H3a satcom 패턴). 또 uvicorn 평문 로그가 같이 섞이지만 grep filter (`marker .+`) 가 JSON-only 로 거름.
+- **fluent-bit tail INPUT 동일 path 다중 등록 제한**: 같은 file glob 으로 INPUT 7개 박으면 첫 매칭조차 못 함. 2개는 운 좋게 됐을 뿐. 해결: container 1 → INPUT 1 + `rewrite_tag` filter 로 stream Tag 분기. emitter 가 새 tag 로 record 를 pipeline 재진입시켜 OUTPUT 의 정확한 tag 매칭.
+- **rewrite_tag rule value 타입**: `Rule $KEY .+ NEW_TAG false` 의 `.+` regex 가 record value 가 **integer 면 매칭 실패**. (예: `"StreamTelemetry": 1` 안 됨, `"StreamTelemetry": "telemetry"` 됨.) marker 키를 코드에서 박을 때 항상 **string** 값으로.
 
 ## 6. 진단 스크립트
 
