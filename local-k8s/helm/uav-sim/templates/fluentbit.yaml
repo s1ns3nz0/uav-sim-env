@@ -53,6 +53,9 @@ data:
         multiline.parser cri
         Mem_Buf_Limit    10MB
         Skip_Long_Lines  On
+        Inotify_Watcher  Off
+        Refresh_Interval 5
+        Read_from_Head   On
 
     [FILTER]
         Name             kubernetes
