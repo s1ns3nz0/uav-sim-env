@@ -101,7 +101,7 @@ gcsQgc:
 fluentBit:
   enabled: false
   image: fluent/fluent-bit:3.2.2
-  clientId: "05f41178-bb7c-4c5a-bfaa-076d0b6a5d94"
+  clientId: "ba886feb-dd39-45c4-89df-cc24d3567338"   # uav-fluentbit-sp (서비스 프린시플 appId)
   tenantId: "850b9f0b-8517-4266-adf5-e8aa2d9aa48c"
   dceUrl: "https://dah-data-dce-ttt8.koreacentral-1.ingest.monitor.azure.com"
   streams:

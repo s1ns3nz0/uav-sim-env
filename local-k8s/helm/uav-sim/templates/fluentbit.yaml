@@ -7,10 +7,6 @@ kind: ServiceAccount
 metadata:
   name: fluentbit
   namespace: soc
-  labels:
-    azure.workload.identity/use: "true"
-  annotations:
-    azure.workload.identity/client-id: {{ .clientId | quote }}
 ---
 # soc default-deny 예외 — Fluent Bit 는 443으로 kube API 서버 + DCE(Logs Ingestion)에 나가야 함
 apiVersion: networking.k8s.io/v1
@@ -75,6 +71,7 @@ data:
         Name             azure_logs_ingestion
         Match            s_{{ .container }}.*
         client_id        {{ $.Values.fluentBit.clientId }}
+        client_secret    ${AZURE_CLIENT_SECRET}
         tenant_id        {{ $.Values.fluentBit.tenantId }}
         dce_url          {{ $.Values.fluentBit.dceUrl }}
         dcr_id           {{ .dcrId }}
@@ -96,7 +93,6 @@ spec:
     metadata:
       labels:
         app: fluentbit
-        azure.workload.identity/use: "true"   # WI 토큰 주입
     spec:
       serviceAccountName: fluentbit
       tolerations:
@@ -105,6 +101,12 @@ spec:
         - name: fluentbit
           image: {{ .image }}
           args: ["--config=/fluent-bit/etc/fluent-bit.conf"]
+          env:
+            - name: AZURE_CLIENT_SECRET     # git 에 없음 — k8s Secret 에서 주입
+              valueFrom:
+                secretKeyRef:
+                  name: fluentbit-azure
+                  key: client-secret
           resources:
             requests: { cpu: "50m", memory: 64Mi }
             limits:   { cpu: "200m", memory: 192Mi }
