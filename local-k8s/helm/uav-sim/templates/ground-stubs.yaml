@@ -36,7 +36,7 @@ spec:
     metadata:
       labels: { app: {{ .name }} }
     spec:
-      nodeSelector: { pool: system }
+      nodeSelector: { pool: {{ default "system" $.Values.groundStubsNodePool }} }
       containers:
         - name: {{ .name }}
           image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}

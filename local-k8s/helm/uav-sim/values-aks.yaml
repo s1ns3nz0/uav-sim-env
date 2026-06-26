@@ -7,10 +7,14 @@ image:
 
 # AKS 에서 데이터패스 on (kind 는 off)
 datalinkLos:  { enabled: true }
-telemetryTap: { enabled: true }
+telemetryTap: { enabled: true, nodePool: sitl }   # system 풀 maxPods=30 회피
 gcsQgc:       { enabled: true }
 fluentBit:    { enabled: true }   # AKS NDJSON → Sentinel 일원화
 ingress:      { enabled: true }   # https://sim.pollak.store (cert-manager + ingress-nginx)
+
+# H3b: system 풀 꽉 차서 ground stubs/c4i 21h Pending → sitl 로 재배치
+c4i: { nodePool: sitl }
+groundStubsNodePool: sitl
 
 # AKS 출처를 표에서 구별하기 위해 UAV_ID 를 다르게 (검증용)
 datalinkSatcom:
