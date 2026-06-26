@@ -104,6 +104,8 @@ fluentBit:
   clientId: "ba886feb-dd39-45c4-89df-cc24d3567338"   # uav-fluentbit-sp (서비스 프린시플 appId)
   tenantId: "850b9f0b-8517-4266-adf5-e8aa2d9aa48c"
   dceUrl: "https://dah-data-dce-ttt8.koreacentral-1.ingest.monitor.azure.com"
+  # stream 값엔 'Custom-' 접두어를 빼고 넣는다 — 플러그인이 table_name 앞에 Custom- 를
+  # 자동으로 붙여 스트림(Custom-<값>)을 만든다. (즉 실제 DCR 스트림 Custom-UAVSatcomLink → 값은 UAVSatcomLink)
   streams:
     # container_name 별 → DCR + stream. marker = 그 컴포넌트 레코드만 거르는 필수 필드.
-    - { container: datalink-satcom, dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "Custom-UAVSatcomLink", marker: "LinkId" }
+    - { container: datalink-satcom, dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVSatcomLink", marker: "LinkId" }
