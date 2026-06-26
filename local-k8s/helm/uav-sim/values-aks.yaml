@@ -13,8 +13,9 @@ fluentBit:    { enabled: true }   # AKS NDJSON → Sentinel 일원화
 ingress:      { enabled: true }   # https://sim.pollak.store (cert-manager + ingress-nginx)
 
 # H3b: system 풀 꽉 차서 ground stubs/c4i 21h Pending → sitl 로 재배치
-c4i: { nodePool: sitl }
+c4i: { nodePool: sitl, logPath: /dev/stdout }   # NDJSON 을 stdout 으로 → Fluent Bit tail 대상
 groundStubsNodePool: sitl
+groundStubsLogToStdout: true                    # 모든 ground 스텁 LOG_FILE_PATH=/dev/stdout
 
 # AKS 출처를 표에서 구별하기 위해 UAV_ID 를 다르게 (검증용)
 datalinkSatcom:

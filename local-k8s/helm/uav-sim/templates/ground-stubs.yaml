@@ -42,7 +42,11 @@ spec:
           image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           env:
+            {{- if $.Values.groundStubsLogToStdout }}
+            - { name: LOG_FILE_PATH, value: /dev/stdout }
+            {{- else }}
             - { name: LOG_FILE_PATH, value: /var/log/uav-sim-env/{{ .logFile }} }
+            {{- end }}
             {{- range $k, $v := .extraEnv }}
             - { name: {{ $k }}, value: {{ $v | quote }} }
             {{- end }}

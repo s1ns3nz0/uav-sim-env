@@ -30,7 +30,7 @@ spec:
           image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           env:
-            - { name: LOG_FILE_PATH, value: /var/log/uav-sim-env/c4i.ndjson }
+            - { name: LOG_FILE_PATH, value: {{ default "/var/log/uav-sim-env/c4i.ndjson" .logPath }} }
           ports: [ { name: http, containerPort: {{ .port }} } ]
           readinessProbe:
             httpGet: { path: /health, port: {{ .port }} }
