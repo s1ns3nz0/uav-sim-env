@@ -95,6 +95,14 @@ spec:
         app: fluentbit
     spec:
       serviceAccountName: fluentbit
+      # 사용자 워크로드 없는 system 풀(maxPods=30 꽉 참) 은 제외 — 그쪽엔 NDJSON 흘릴
+      # 컨테이너가 없어 FB 가 떠도 의미 없음. sitl+satcom 풀만 커버.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - { key: pool, operator: In, values: [sitl, satcom] }
       tolerations:
         - operator: Exists                     # 모든 노드(satcom taint 포함)에서 로그 수집
       containers:
