@@ -124,13 +124,13 @@ fluentBit:
     - { container: pgse-stub,          dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVMaintenance",  marker: "BatteryId" }
     # telemetry-tap 7 분기 (같은 stdout 에 7 종류 NDJSON 섞임).
     # 코드에서 각 payload 에 _Stream<Name>:1 키 추가 (v3 이미지) → marker 가 항상 unique.
-    - { container: telemetry-tap,      dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVTelemetry",    marker: "_StreamTelemetry" }
-    - { container: telemetry-tap,      dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVOperator",     marker: "_StreamOperator" }
-    - { container: telemetry-tap,      dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVMissionEvent", marker: "_StreamMission" }
-    - { container: telemetry-tap,      dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVFailsafe",     marker: "_StreamFailsafe" }
-    - { container: telemetry-tap,      dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVConfigAudit",  marker: "_StreamConfigAudit" }
-    - { container: telemetry-tap,      dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVImagery",      marker: "_StreamImagery" }
-    - { container: telemetry-tap,      dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVMavsec",       marker: "_StreamMavsec" }
+    - { container: telemetry-tap,      dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVTelemetry",    marker: "StreamTelemetry" }
+    - { container: telemetry-tap,      dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVOperator",     marker: "StreamOperator" }
+    - { container: telemetry-tap,      dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVMissionEvent", marker: "StreamMission" }
+    - { container: telemetry-tap,      dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVFailsafe",     marker: "StreamFailsafe" }
+    - { container: telemetry-tap,      dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVConfigAudit",  marker: "StreamConfigAudit" }
+    - { container: telemetry-tap,      dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVImagery",      marker: "StreamImagery" }
+    - { container: telemetry-tap,      dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVMavsec",       marker: "StreamMavsec" }
     # sar-stub (ext2 DCR). marker FrameId 는 NDJSON 만 보유.
     - { container: sar-stub,           dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVSarPayload",   marker: "FrameId" }
 

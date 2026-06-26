@@ -11,7 +11,7 @@ telemetryTap:
   enabled: true
   nodePool: sitl                 # system 풀 maxPods=30 회피
   stdoutMode: true               # 7 NDJSON 전부 /dev/stdout → FB tail 가능
-  imageTag: v3                   # 7 _Stream<Name> marker 코드 추가 (H3b-6)
+  imageTag: v4                   # 7 Stream<Name> marker (rewrite_tag $-prefix 충돌 회피)
 gcsQgc:       { enabled: true }
 fluentBit:    { enabled: true }   # AKS NDJSON → Sentinel 일원화
 ingress:      { enabled: true }   # https://sim.pollak.store (cert-manager + ingress-nginx)
