@@ -108,7 +108,15 @@ fluentBit:
   # 자동으로 붙여 스트림(Custom-<값>)을 만든다. (즉 실제 DCR 스트림 Custom-UAVSatcomLink → 값은 UAVSatcomLink)
   streams:
     # container_name 별 → DCR + stream. marker = 그 컴포넌트 레코드만 거르는 필수 필드.
-    - { container: datalink-satcom, dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVSatcomLink", marker: "LinkId" }
+    # marker 는 uvicorn 등 평문 로그를 거르고 NDJSON 레코드만 통과시키는 안전망.
+    # dcrId: primary=dcr-5c6adbef..., extras=dcr-3fcc15a7..., ext2=dcr-1aad0b1c...
+    - { container: datalink-satcom,    dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVSatcomLink",   marker: "LinkId" }
+    - { container: mps-stub,           dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVMissionPlan",  marker: "PlanId" }
+    - { container: c4i-stub,           dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVC4I",          marker: "OrderId" }
+    - { container: weapon-stub,        dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVWeapon",       marker: "SafetyState" }
+    - { container: cyber-posture-stub, dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVCyberPosture", marker: "Level" }
+    - { container: ti-stub,            dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVThreatIntel",  marker: "Indicator" }
+    - { container: auth-stub,          dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVOpAudit",      marker: "SessionId" }
 
 # HTTPS Ingress (ingress-nginx + cert-manager 설치 후 enable). 기본 off(kind).
 ingress:
