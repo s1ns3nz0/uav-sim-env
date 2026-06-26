@@ -1,13 +1,13 @@
 # HANDOFF → Claude Code
 
 이 문서는 진행 중인 작업을 Claude Code가 이어받기 위한 **컨텍스트 + 현재 블로커 + 잔여 로드맵**이다.
-바로 다음 작업(권장): **테스트 비행으로 트래픽 시작 → 17개 stream 도착량 검증 → VM 폐기**. H3b 인프라(파이프) 완성됨.
+바로 다음 작업(권장): **mission-planner 페이지로 9 stub HTTP 트래픽 자동화** (UAVC4I/MissionPlan/Weapon/Pgse/Maintenance/ThreatIntel/OpAudit/SarPayload/CyberPosture). 인프라(파이프) + SITL 트래픽은 끝, VM 폐기 완료.
 
 ---
 
 ## 0. 한 줄 요약
 
-LIG D&A 해커톤 UAV SOC 시뮬을 **단일 VM → AKS(GitOps/Helm/ArgoCD)** 로 이전 완료. 도메인·데이터패스·Sentinel 일원화 PoC + **HTTPS(`https://sim.pollak.store/vnc.html` HTTP/2 200, LE prod cert Ready)** 까지 동작. 남은 큰 일은 Sentinel 일원화 + VM 폐기.
+LIG D&A 해커톤 UAV SOC 시뮬을 **단일 VM → AKS(GitOps/Helm/ArgoCD)** 로 이전 완료. 도메인·데이터패스·**Sentinel 17-stream 일원화**·HTTPS(`https://sim.pollak.store/vnc.html` HTTP/2 200) 다 동작. **VM 폐기됨 (deallocated, disk 유지)**. 라이브 트래픽 = QGC noVNC 에서 SITL 비행 → telemetry-tap 7 + datalink-satcom 1 stream.
 
 ## 1. 리소스 식별자 (전부 koreacentral)
 
@@ -113,9 +113,14 @@ az network lb probe list -g dah-sim-rg-aks-nodes --lb-name kubernetes \
 
 위 둘 다 트래픽 측면이고 인프라 측은 정상.
 
-🎯 VM 폐기 (모든 stream 도착 검증 후):
-- `az vm deallocate -g dah-sim-rg -n uavsim-vm` (또는 삭제).
-- **주의: `dah-sim-rg` 통째 삭제 금지(AKS도 거기).**
+✅ VM 폐기 (2026-06-26): `az vm deallocate -g dah-sim-rg -n uavsim-vm` 완료. compute 과금 중단, disk 유지(필요 시 `az vm start` 으로 복귀). **주의: `dah-sim-rg` 통째 삭제 금지(AKS도 거기).**
+
+✅ 트래픽 검증 (30분 비행, 2026-06-26):
+- UAVTelemetry 68,352 / UAVOperator 3,171 / UAVMissionEvent 3,078 / UAVSatcomLink 403 / UAVConfigAudit 169 / UAVMavsec 55 / UAVFailsafe 4 — 다 정상 도착, UAVId=MUAV-AKS-001 (datalink-satcom + telemetry-tap 둘 다 override).
+- UAVImagery 0 = mission 에 CAMERA_TRIGGER waypoint 없어서. 향후 mission-planner 가 박으면 흐름.
+- 9 stub HTTP stream (UAVC4I/MissionPlan/Weapon/Pgse/Maintenance/ThreatIntel/OpAudit/SarPayload/CyberPosture) = 호출자 없음, 0 카운트. mission-planner 작업으로 분리.
+
+지도 타일 fetch 를 위해 `gcs-egress-internet` NP 추가됨 (443/80 외부만, 사설 대역 제외).
 
 ### 4-2. 정리/위생
 - SP 시크릿 로테이션: `az ad app credential reset --id ba886feb-...` → k8s secret `soc/fluentbit-azure` 갱신.
