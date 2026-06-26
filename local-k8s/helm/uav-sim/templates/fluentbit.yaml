@@ -44,13 +44,19 @@ data:
         Flush        5
         Daemon       Off
         Log_Level    info
+    # container 별 group — 같은 path 의 multi-INPUT 등록 충돌(fluent-bit tail 한계)을
+    # 피하려고 container 마다 INPUT 1개만 두고 rewrite_tag 로 stream 별 Tag 분기.
+    {{- $groups := dict }}
     {{- range .streams }}
+    {{- $list := index $groups .container | default list }}
+    {{- $_ := set $groups .container (append $list .) }}
+    {{- end }}
+    {{- range $container, $routes := $groups }}
 
     [INPUT]
         Name             tail
-        Path             /var/log/containers/*{{ .container }}*.log
-        Tag              s_{{ .container }}_{{ .stream }}.*
-        DB               /flb-state/{{ .container }}_{{ .stream }}.db
+        Path             /var/log/containers/*{{ $container }}*.log
+        Tag              raw_{{ $container }}.*
         multiline.parser cri
         Mem_Buf_Limit    10MB
         Skip_Long_Lines  On
@@ -59,20 +65,24 @@ data:
 
     [FILTER]
         Name             kubernetes
-        Match            s_{{ .container }}_{{ .stream }}.*
+        Match            raw_{{ $container }}.*
         Merge_Log        On
         Keep_Log         Off
         Labels           Off
         Annotations      Off
 
     [FILTER]
-        Name             grep
-        Match            s_{{ .container }}_{{ .stream }}.*
-        Regex            {{ .marker }} .+
+        Name             rewrite_tag
+        Match            raw_{{ $container }}.*
+        {{- range $routes }}
+        Rule             ${{ .marker }} .+ s_{{ $container }}_{{ .stream }} false
+        {{- end }}
+        Emitter_Name     re_{{ $container }}
+    {{- range $routes }}
 
     [OUTPUT]
         Name             azure_logs_ingestion
-        Match            s_{{ .container }}_{{ .stream }}.*
+        Match            s_{{ $container }}_{{ .stream }}
         client_id        {{ $.Values.fluentBit.clientId }}
         client_secret    ${AZURE_CLIENT_SECRET}
         tenant_id        {{ $.Values.fluentBit.tenantId }}
@@ -81,6 +91,7 @@ data:
         table_name       {{ .stream }}
         time_key         TimeGenerated
         time_generated   true
+    {{- end }}
     {{- end }}
 ---
 apiVersion: apps/v1
@@ -124,10 +135,8 @@ spec:
           volumeMounts:
             - { name: varlog, mountPath: /var/log, readOnly: true }
             - { name: config, mountPath: /fluent-bit/etc/fluent-bit.conf, subPath: fluent-bit.conf }
-            - { name: flbstate, mountPath: /flb-state }
       volumes:
         - { name: varlog, hostPath: { path: /var/log } }
         - { name: config, configMap: { name: fluentbit-config } }
-        - { name: flbstate, emptyDir: {} }
 {{- end }}
 {{- end }}
