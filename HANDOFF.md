@@ -1,13 +1,13 @@
 # HANDOFF → Claude Code
 
 이 문서는 진행 중인 작업을 Claude Code가 이어받기 위한 **컨텍스트 + 현재 블로커 + 잔여 로드맵**이다.
-바로 다음 작업: **`sim.pollak.store` HTTPS가 안 되는 AKS LB 문제 해결** (아래 §3).
+바로 다음 작업(권장): **§4-1 Sentinel 완전 일원화(H3b) → VM 폐기**. HTTPS 블로커는 해소됨(§3).
 
 ---
 
 ## 0. 한 줄 요약
 
-LIG D&A 해커톤 UAV SOC 시뮬을 **단일 VM → AKS(GitOps/Helm/ArgoCD)** 로 이전 완료. 도메인·데이터패스·Sentinel 일원화 PoC까지 동작. **현재 막힌 것: AKS ingress-nginx LB의 외부 트래픽이 안 통해 HTTPS 미완성.**
+LIG D&A 해커톤 UAV SOC 시뮬을 **단일 VM → AKS(GitOps/Helm/ArgoCD)** 로 이전 완료. 도메인·데이터패스·Sentinel 일원화 PoC + **HTTPS(`https://sim.pollak.store/vnc.html` HTTP/2 200, LE prod cert Ready)** 까지 동작. 남은 큰 일은 Sentinel 일원화 + VM 폐기.
 
 ## 1. 리소스 식별자 (전부 koreacentral)
 
@@ -39,36 +39,42 @@ GitOps: 차트 `local-k8s/helm/uav-sim` (base `values.yaml` + `values-aks.yaml`)
 - **Sentinel 일원화 PoC**: `datalink-satcom` NDJSON(stdout) → `soc/fluentbit` DaemonSet → Logs Ingestion API(SP 인증) → DCR ext2 → `UAVSatcomLink_CL`. AKS 출처는 `UAVId == 'MUAV-AKS-001'` 로 구분. http_status=204 확인됨.
 - cert-manager + ingress-nginx 설치됨.
 
-## 3. 현재 블로커 — HTTPS / ingress LB ★ 최우선
+## 3. HTTPS / ingress LB — ✅ 해결 (2026-06-26)
 
-**증상**: `https://sim.pollak.store` 미완성. cert-manager HTTP-01 challenge가 self-check timeout.
-근본 원인: **외부에서 ingress LB IP `20.194.99.116:80` 으로 접속이 timeout** (cert는 부차적 — LB가 트래픽을 안 흘리니 HTTPS도 못 뜸).
+`https://sim.pollak.store/vnc.html` → `HTTP/2 200`, `certificate gcs-qgc-tls` `Ready True`. LE prod issuer 그대로 사용.
 
-**지금까지 확인 (전부 정상인데도 외부 timeout):**
-- DNS `sim.pollak.store` → `20.194.99.116` ✅ (`dig @8.8.8.8`)
-- `ingress-nginx-controller` Pod `1/1 Running` (sitl 노드), **내부에서 `404` 응답 = 컨트롤러 정상** (`kubectl -n ingress-nginx run t --rm -i --image=busybox -- wget -qO- http://ingress-nginx-controller.ingress-nginx.svc/`)
-- svc EXTERNAL-IP `20.194.99.116`, `externalTrafficPolicy: Cluster`
-- LB `kubernetes`(node RG)에 `TCP-80`/`TCP-443` 룰 존재, 프론트엔드 `a5501dda...` = `uav-ingress-ip` 가 attach됨 (`az network public-ip show ... ipConfiguration.id` 가 그 frontend 가리킴)
-- NSG `aks-agentpool-30914346-nsg` 에 80/443 Allow 규칙 추가함(+ AKS 자동 룰)
-- 그런데도 외부 `curl -m8 http://20.194.99.116/` → **Connection timed out**
+**근본 원인 (2개 동시 적중):**
+1. **LB health probe HTTP `/` → ingress-nginx default backend가 `404` 반환 → probe unhealthy → LB가 80/443 trafficc drop.**
+   같은 LB의 `8080`(gcs-qgc-lb)이 외부 정상 동작했던 이유는 그건 **TCP probe** 였기 때문 — 차이는 probe 프로토콜이었음.
+2. **ground `default-deny` NetworkPolicy 가 cert-manager HTTP-01 solver pod 의 :8089 인입을 차단** → controller 가 challenge solver upstream으로 connect timeout → challenge 영구 `pending`.
 
-**아직 안 본/의심 지점 (Claude Code가 여기부터):**
-1. **LB health probe** — 80/443 룰의 프로브가 백엔드(노드)를 unhealthy로 보면 LB가 트래픽을 drop. `az network lb probe list -g dah-sim-rg-aks-nodes --lb-name kubernetes -o table` + 백엔드 풀 멤버/헬스 확인. (참고: 같은 LB의 `8080`(gcs-qgc-lb)은 외부 정상 동작 → LB 자체는 멀쩡, 80/443 룰 또는 그 프로브/프론트엔드만 문제일 가능성.)
-2. **고정IP 강제(`loadBalancerIP`, deprecated) 부작용** — auto-IP로 재생성 시도: 어노테이션/`loadBalancerIP` 제거 → AKS가 새 IP로 재와이어링 → 그 IP로 외부 curl 테스트 → 되면 DNS 그 IP로.
-3. **프론트엔드/룰 stale** — ingress svc 삭제 후 재생성(helm uninstall/install 또는 svc 재생성)으로 LB 재구성.
+**적용한 픽스:**
+- `kubectl -n ingress-nginx patch svc ingress-nginx-controller -p '{"spec":{"externalTrafficPolicy":"Local"}}'` → `healthCheckNodePort` 자동 생성, probe path가 `/healthz` 로 바뀌어 200 → healthy. 영구화:
+  ```bash
+  helm upgrade ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx \
+    --version 4.15.1 --reuse-values \
+    --set controller.service.externalTrafficPolicy=Local
+  ```
+  (release values: `controller.service.loadBalancerIP=20.194.99.116` + `externalTrafficPolicy=Local`. helm release는 ArgoCD 밖, hand-managed.)
+- 차트 `local-k8s/helm/uav-sim/templates/networkpolicies.yaml` 에 `allow-acme-solver` NP 추가:
+  - podSelector `acme.cert-manager.io/http01-solver=true`, ingress from ns `ingress-nginx` port 8089/TCP.
+  - challenge 진행 중에만 매칭됨(solver pod이 그때만 떠있음). 평상시 매칭 0.
 
-**대안(권장 검토)**: HTTP-01이 self-check 때문에 까다로우면 **cert-manager DNS-01 + Azure DNS**(zone `pollak.store` in `dah-shared-rg`)로 전환하면 발급은 깔끔. 단 **LB 외부 경로 문제는 그래도 별도로 고쳐야 HTTPS가 실제로 서빙됨**. 즉 LB 외부 timeout이 핵심.
-
-**HTTPS 못 고치면 즉시 복구 (도메인 살리기)**: 지금 도메인이 깨진 IP를 가리켜 GCS가 접속 불가. HTTP 동작 IP로 되돌릴 것:
+**검증 명령** (회귀 시 다시 실행):
 ```bash
-az network dns record-set a add-record    -g dah-shared-rg -z pollak.store -n sim -a 20.249.193.191
-az network dns record-set a remove-record -g dah-shared-rg -z pollak.store -n sim -a 20.194.99.116
+curl -sI https://sim.pollak.store/vnc.html | head -1   # HTTP/2 200
+kubectl -n ground get certificate gcs-qgc-tls          # READY True
+az network lb probe list -g dah-sim-rg-aks-nodes --lb-name kubernetes \
+  --query "[?contains(name,'a5501dda')].{n:name,p:port,path:requestPath}" -o table
+# → /healthz 로 떠야 정상. `/` 로 보이면 externalTrafficPolicy 가 Cluster 로 돌아온 것.
 ```
-그리고 차트에서 ingress 끄기: `local-k8s/helm/uav-sim/values-aks.yaml` 의 `ingress: { enabled: true }` → `false`, commit/push (LE prod 재시도 rate-limit 방지).
 
-성공 판정: `curl -sI https://sim.pollak.store/vnc.html` → `HTTP/2 200`, `kubectl -n ground get certificate gcs-qgc-tls` → `READY True`.
+**리스크 / 메모:**
+- `externalTrafficPolicy=Local` + controller `replicas=1` = controller 있는 노드 1개만 LB healthy → SPOF. 가용성 필요하면 `controller.replicaCount=2` + topology spread + sitl 노드풀이 ≥2여야.
+- helm `--reuse-values` 통해 향후 ingress-nginx upgrade 시 externalTrafficPolicy 가 유지되는지 매번 확인. 누락되면 즉시 다시 set.
+- `loadBalancerIP` 는 deprecated. 향후 Azure cloud-provider 가 강제 제거하면 `service.beta.kubernetes.io/azure-pip-name=uav-ingress-ip` annotation 방식으로 바꿔야 함.
 
-진단 자동화: `scripts/fix-ingress-https.sh` 참고(아래 §6).
+**예전 복구 절차 (이제 불필요, 회귀 대비 보존):** §6의 `bash scripts/fix-ingress-https.sh --revert` 가 DNS 를 `20.249.193.191` 로 되돌리고 ingress off 안내까지 출력함.
 
 ## 4. 잔여 로드맵 (선택, 우선순위 낮음)
 
@@ -102,6 +108,8 @@ extras DCR(`dcr-3fcc15a7...`) 매핑은 `infra/sentinel/dcr-extras.bicep` 읽어
 - soc namespace는 default-deny → FB가 443(API서버+DCE) egress 하려면 NetworkPolicy 예외 필요(`fluentbit-egress`, 차트에 있음).
 - ArgoCD ConfigMap 갱신 후 Fluent Bit는 **수동 재시작** 필요, 그리고 **DaemonSet 롤링업데이트가 Pending 파드(maxPods)에 막히면** 다른 파드도 안 바뀜 → 막힌 노드 파드 강제 삭제.
 - AKS 노드 vCPU 쿼터 8 → D2s_v5×3(6vCPU). 편대/노드 증설 시 쿼터 증액 필요.
+- **Azure LoadBalancer + ingress-nginx의 함정**: `externalTrafficPolicy=Cluster` 면 Azure cloud-provider 가 LB rule probe를 **HTTP path `/`** 로 자동 설정 → controller default backend 404 → unhealthy → 외부 traffic drop. `Local` 로 바꾸면 `healthCheckNodePort` + `/healthz` 가 자동 와이어링되어 해결. (그래서 같은 LB의 다른 svc 가 TCP probe 면 잘 동작해도 ingress 룰만 죽는 비대칭이 나옴.)
+- **cert-manager HTTP-01 + default-deny NP**: solver pod label = `acme.cert-manager.io/http01-solver=true`, port `8089`. ingress-nginx ns 에서 그 selector 로의 인입을 명시적으로 열어야 challenge 통과. challenge 영구 `pending` 이면 거의 NP.
 
 ## 6. 진단 스크립트
 

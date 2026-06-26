@@ -141,3 +141,20 @@ spec:
     - ports:
         - { protocol: TCP, port: 8080 }
         - { protocol: TCP, port: 5900 }
+---
+# cert-manager HTTP-01 solver 임시 Pod(label http01-solver=true) → ingress-nginx 인입 허용
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: allow-acme-solver, namespace: ground }
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - { protocol: TCP, port: 8089 }
