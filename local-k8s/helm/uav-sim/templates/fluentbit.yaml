@@ -50,10 +50,10 @@ data:
         Name             tail
         Path             /var/log/containers/*{{ .container }}*.log
         Tag              s_{{ .container }}_{{ .stream }}.*
+        DB               /flb-state/{{ .container }}_{{ .stream }}.db
         multiline.parser cri
         Mem_Buf_Limit    10MB
         Skip_Long_Lines  On
-        Inotify_Watcher  Off
         Refresh_Interval 5
         Read_from_Head   On
 
@@ -124,8 +124,10 @@ spec:
           volumeMounts:
             - { name: varlog, mountPath: /var/log, readOnly: true }
             - { name: config, mountPath: /fluent-bit/etc/fluent-bit.conf, subPath: fluent-bit.conf }
+            - { name: flbstate, mountPath: /flb-state }
       volumes:
         - { name: varlog, hostPath: { path: /var/log } }
         - { name: config, configMap: { name: fluentbit-config } }
+        - { name: flbstate, emptyDir: {} }
 {{- end }}
 {{- end }}
