@@ -52,7 +52,7 @@ groundStubs:
   - { name: mps-stub,            image: mps,            port: 8100, logFile: mps.ndjson }
   - { name: pgse-stub,           image: pgse,           port: 8000, logFile: pgse.ndjson,
       approvedFirmwareConfigMap: true,
-      extraEnv: { APPROVED_DB: /data/approved_firmware.json, TOKEN_TTL_SEC: "300", MAINT_FILE_PATH: /var/log/uav-sim-env/maintenance.ndjson } }
+      extraEnv: { APPROVED_DB: /data/approved_firmware.json, TOKEN_TTL_SEC: "300", MAINT_FILE_PATH: /dev/stdout } }
   - { name: weapon-stub,         image: weapon,         port: 8400, logFile: weapon.ndjson }
   - { name: ti-stub,             image: ti,             port: 8500, logFile: ti.ndjson }
   - { name: auth-stub,           image: auth,           port: 8600, logFile: auth.ndjson,
@@ -117,6 +117,10 @@ fluentBit:
     - { container: cyber-posture-stub, dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVCyberPosture", marker: "Level" }
     - { container: ti-stub,            dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVThreatIntel",  marker: "Indicator" }
     - { container: auth-stub,          dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVOpAudit",      marker: "SessionId" }
+    # pgse 분기: 같은 컨테이너 stdout 에 두 종류 NDJSON 이 섞임 → marker 로 갈라치기.
+    # Tag 에 stream 이름이 포함되므로 동일 container 다중 stream 가능.
+    - { container: pgse-stub,          dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVPgse",         marker: "ImageHashSubmitted" }
+    - { container: pgse-stub,          dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVMaintenance",  marker: "BatteryId" }
 
 # HTTPS Ingress (ingress-nginx + cert-manager 설치 후 enable). 기본 off(kind).
 ingress:

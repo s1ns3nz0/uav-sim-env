@@ -49,14 +49,14 @@ data:
     [INPUT]
         Name             tail
         Path             /var/log/containers/*{{ .container }}*.log
-        Tag              s_{{ .container }}.*
+        Tag              s_{{ .container }}_{{ .stream }}.*
         multiline.parser cri
         Mem_Buf_Limit    10MB
         Skip_Long_Lines  On
 
     [FILTER]
         Name             kubernetes
-        Match            s_{{ .container }}.*
+        Match            s_{{ .container }}_{{ .stream }}.*
         Merge_Log        On
         Keep_Log         Off
         Labels           Off
@@ -64,12 +64,12 @@ data:
 
     [FILTER]
         Name             grep
-        Match            s_{{ .container }}.*
+        Match            s_{{ .container }}_{{ .stream }}.*
         Regex            {{ .marker }} .+
 
     [OUTPUT]
         Name             azure_logs_ingestion
-        Match            s_{{ .container }}.*
+        Match            s_{{ .container }}_{{ .stream }}.*
         client_id        {{ $.Values.fluentBit.clientId }}
         client_secret    ${AZURE_CLIENT_SECRET}
         tenant_id        {{ $.Values.fluentBit.tenantId }}
