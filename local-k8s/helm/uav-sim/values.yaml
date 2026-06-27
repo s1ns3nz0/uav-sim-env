@@ -15,7 +15,7 @@ namespaces:
 # air — av-muav (고정익 MALE SITL, StatefulSet)
 avMuav:
   enabled: true
-  replicas: 1               # 편대 규모 = replica 수
+  replicas: 3               # 편대 규모 = replica 수. pod ordinal 0/1/2 → INSTANCE 0/1/2 → SysId 1/2/3.
   image: av
   frame: plane
   instance: "1"

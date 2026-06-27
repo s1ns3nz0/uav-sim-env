@@ -6,13 +6,15 @@ image:
   pullPolicy: IfNotPresent
 
 # AKS 에서 데이터패스 on (kind 는 off)
-datalinkLos:  { enabled: true }
+datalinkLos:
+  enabled: true
+  imageTag: v2                   # 편대 N TcpEndpoint loop (av-muav-0/1/2)
 telemetryTap:
   enabled: true
   nodePool: sitl                 # system 풀 maxPods=30 회피
   stdoutMode: true               # 7 NDJSON 전부 /dev/stdout → FB tail 가능
-  imageTag: v5                   # Stream<Name> 값 string (rewrite_tag regex 매칭 안정)
-  uavId: "MUAV-AKS-001"          # AKS 출처 분리 (datalink-satcom 과 동일)
+  imageTag: v6                   # UAVId = prefix + SysId suffix (편대)
+  uavId: "MUAV-AKS"              # prefix 만 — 코드가 "-SYS001/002/003" 박음
 gcsQgc:       { enabled: true }
 fluentBit:    { enabled: true }   # AKS NDJSON → Sentinel 일원화
 ingress:      { enabled: true }   # https://sim.pollak.store (cert-manager + ingress-nginx)

@@ -43,19 +43,36 @@ spec:
         - name: sitl
           image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          # pod ordinal(av-muav-N 의 N) 기반으로 INSTANCE/HOME/router port 동적.
+          # SITL 의 mavlink TCP listen port = 5760 + 10*INSTANCE 이므로 bootstrap
+          # 도 그 port 로 따라가야 ARMING_CHECK 등 param 패치가 정확히 붙는다.
+          command: ["bash", "-c"]
+          args:
+            - |
+              ORD=${HOSTNAME##*-}
+              export INSTANCE=$ORD
+              PORT=$((5760 + 10*ORD))
+              export BOOTSTRAP_ROUTER_TCP="tcp:127.0.0.1:${PORT}"
+              # HOME = base + ordinal * 작은 offset (편대원끼리 살짝 떨어뜨림)
+              export HOME_LAT=$(awk -v b="$HOME_LAT_BASE" -v o="$ORD" 'BEGIN{printf "%.6f", b + o*0.0008}')
+              export HOME_LON=$(awk -v b="$HOME_LON_BASE" -v o="$ORD" 'BEGIN{printf "%.6f", b + o*0.0008}')
+              echo "[av-muav] ORD=$ORD INSTANCE=$INSTANCE PORT=$PORT HOME=$HOME_LAT,$HOME_LON"
+              exec /home/sitl/entrypoint.sh
           env:
             - { name: VEHICLE, value: ArduPlane }
             - { name: FRAME, value: {{ .frame | quote }} }
-            - { name: INSTANCE, value: {{ .instance | quote }} }
             - { name: PERSONA_PARAM, value: {{ .persona | quote }} }
-            - { name: BOOTSTRAP_ROUTER_TCP, value: "tcp:127.0.0.1:5770" }
-            - { name: HOME_LAT, value: {{ .home.lat | quote }} }
-            - { name: HOME_LON, value: {{ .home.lon | quote }} }
+            - { name: HOME_LAT_BASE, value: {{ .home.lat | quote }} }
+            - { name: HOME_LON_BASE, value: {{ .home.lon | quote }} }
             - { name: HOME_ALT, value: {{ .home.alt | quote }} }
             - { name: HOME_HEADING, value: {{ .home.heading | quote }} }
-          ports: [ { name: mavlink, containerPort: 5770 } ]
+          # SITL port 가 ordinal 별 다름 — readiness 도 동적으로 그 port 검사.
           readinessProbe:
-            tcpSocket: { port: 5770 }
+            exec:
+              command:
+                - bash
+                - -c
+                - 'ORD=${HOSTNAME##*-}; ss -tln | grep -q ":$((5760+10*ORD)) "'
             initialDelaySeconds: 40
             periodSeconds: 10
           resources:

@@ -35,10 +35,9 @@ if [ "${GEN_CONF:-0}" = "1" ]; then
         echo "[datalink-los] WARN: could not resolve $1" >&2
         echo ""
     }
-    AV_IP="$(resolve "${AV_HOST:-av-muav-mav.air.svc.cluster.local}")"
     GCS_IP="$(resolve "${GCS_HOST:-gcs-qgc.ground.svc.cluster.local}")"
     TAP_IP="$(resolve "${TAP_HOST:-telemetry-tap.soc.svc.cluster.local}")"
-    echo "[datalink-los] resolved av=$AV_IP gcs=$GCS_IP tap=$TAP_IP"
+    echo "[datalink-los] resolved gcs=$GCS_IP tap=$TAP_IP"
     CONF=/tmp/main.conf
     cat > "$CONF" <<EOF
 [General]
@@ -47,11 +46,6 @@ ReportStats=true
 MavlinkDialect=common
 Log=/tmp/mavlink-router.log
 LogMode=while-armed
-
-[TcpEndpoint av_in]
-Address=${AV_IP}
-Port=${AV_PORT:-5770}
-RetryTimeout=3
 
 [UdpEndpoint gcs_out]
 Mode=Normal
@@ -63,6 +57,25 @@ Mode=Normal
 Address=${TAP_IP}
 Port=${TAP_PORT:-14552}
 EOF
+    # 편대(StatefulSet) — av-muav-0/1/2.av-muav.air.svc 다 별도 TcpEndpoint.
+    # SITL 의 mavlink TCP port = 5760 + 10*ORD. AV_STS=StatefulSet 이름, AV_NS=ns,
+    # AV_REPLICAS=N. 차트에서 env 로 넘겨준다.
+    AV_STS="${AV_STS:-av-muav}"
+    AV_NS="${AV_NS:-air}"
+    AV_REPLICAS="${AV_REPLICAS:-1}"
+    for i in $(seq 0 $((AV_REPLICAS - 1))); do
+        AV_FQDN="${AV_STS}-${i}.${AV_STS}.${AV_NS}.svc.cluster.local"
+        AV_IP="$(resolve "$AV_FQDN")"
+        AV_PORT=$((5760 + 10*i))
+        echo "[datalink-los] av_in_${i}: $AV_FQDN ($AV_IP):$AV_PORT"
+        cat >> "$CONF" <<EOF
+
+[TcpEndpoint av_in_${i}]
+Address=${AV_IP}
+Port=${AV_PORT}
+RetryTimeout=3
+EOF
+    done
 fi
 
 echo "[datalink-los] launching mavlink-router (conf=$CONF)"

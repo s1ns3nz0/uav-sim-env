@@ -28,19 +28,22 @@ spec:
       nodeSelector: { pool: {{ .nodePool }} }
       containers:
         - name: datalink-los
-          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ default $.Values.image.tag .imageTag }}
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           securityContext:
             capabilities:
               add: ["NET_ADMIN"]      # tc netem (RF 링크 열화 모사)
           env:
             - { name: GEN_CONF, value: "1" }   # k8s: 서비스 DNS → IP resolve 후 conf 생성
-            - { name: AV_HOST,  value: {{ .avHost  | quote }} }
-            - { name: AV_PORT,  value: {{ .avPort  | quote }} }
+            # 편대 N대: av-muav-0/1/2.av-muav.air.svc 별 TcpEndpoint 동적 박음.
+            - { name: AV_STS,      value: "av-muav" }
+            - { name: AV_NS,       value: "air" }
+            - { name: AV_REPLICAS, value: {{ $.Values.avMuav.replicas | quote }} }
             - { name: GCS_HOST, value: {{ .gcsHost | quote }} }
             - { name: GCS_PORT, value: {{ .gcsPort | quote }} }
             - { name: TAP_HOST, value: {{ .tapHost | quote }} }
             - { name: TAP_PORT, value: {{ .tapPort | quote }} }
+            # AV_HOST/AV_PORT: 기존 single-vehicle 호환용. 위 AV_REPLICAS 로 fleet 처리됨.
             - { name: LINK_DELAY_MS,  value: {{ .netem.delayMs  | quote }} }
             - { name: LINK_JITTER_MS, value: {{ .netem.jitterMs | quote }} }
             - { name: LINK_LOSS_PCT,  value: {{ .netem.lossPct  | quote }} }

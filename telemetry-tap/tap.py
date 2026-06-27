@@ -394,11 +394,19 @@ def _record_for(msg: Any) -> dict[str, Any]:
         A dict with TimeGenerated, UAVId, MsgType, plus message-specific fields.
     """
     msg_type = msg.get_type()
+    sys_id = msg.get_srcSystem()
+    # 편대 모드: UAV_ID 가 prefix("MUAV-AKS") 면 SysId 별로 suffix(-SYS00N) 박아
+    # 같은 telemetry-tap 가 다중 vehicle 의 NDJSON 을 UAVId 로 구분 가능하게.
+    # 단일 vehicle 시절 호환: UAV_ID 가 그대로 "MUAV-001" 같은 완전체면 suffix X.
+    if UAV_ID.startswith("MUAV-AKS") and "-SYS" not in UAV_ID:
+        uav_id = f"{UAV_ID}-SYS{sys_id:03d}"
+    else:
+        uav_id = UAV_ID
     record: dict[str, Any] = {
         "TimeGenerated": _now_iso(),
-        "UAVId": UAV_ID,
+        "UAVId": uav_id,
         "MsgType": msg_type,
-        "SystemId": msg.get_srcSystem(),
+        "SystemId": sys_id,
         "ComponentId": msg.get_srcComponent(),
     }
 
