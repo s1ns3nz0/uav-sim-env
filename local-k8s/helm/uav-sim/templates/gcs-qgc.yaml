@@ -44,6 +44,11 @@ spec:
       labels: { app: gcs-qgc }
     spec:
       nodeSelector: { pool: {{ .nodePool }} }
+      {{- if eq .nodePool "satcom" }}
+      # satcom 노드는 dedicated=satcom NoSchedule taint — toleration 필수
+      tolerations:
+        - { key: dedicated, operator: Equal, value: satcom, effect: NoSchedule }
+      {{- end }}
       containers:
         - name: gcs-qgc
           image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}

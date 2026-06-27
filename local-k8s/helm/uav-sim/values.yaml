@@ -95,7 +95,7 @@ telemetryTap:
 gcsQgc:
   enabled: false
   image: gcs-qgc
-  nodePool: sitl          # av-muav 와 같은 sitl 노드(시스템 풀 혼잡 회피)
+  nodePool: satcom        # QGC AppImage single-thread bound → CPU 독점 위해 satcom 노드(여유 큼) 이전
   mavlinkInPort: "14550"
   vncPassword: uavsim
   loadBalancer: true      # 외부 공인 IP (도메인 연결용)
