@@ -23,7 +23,7 @@ avMuav:
   instance: "1"
   persona: /home/sitl/persona/muav_male.parm
   nodePool: sitl
-  home: { lat: "37.4030", lon: "127.1060", alt: "300", heading: "0" }
+  home: { lat: "36.7100", lon: "126.1300", alt: "20", heading: "0" }   # ADD 안흥 시험비행장 (충남 태안) — KUS-FS MUAV 실 시험지 (의미 일치)
   resources:
     # 편대 3대 = sitl 노드 D2s_v5(2vCPU)에 들어가도록 req 낮춤. SITL CPU 평시 낮음.
     requests: { cpu: "100m", memory: 384Mi }
