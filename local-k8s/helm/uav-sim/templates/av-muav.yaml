@@ -32,6 +32,9 @@ metadata:
 spec:
   serviceName: av-muav
   replicas: {{ .replicas }}
+  # 편대 부팅 시간 단축 — 직렬(OrderedReady) 이면 3대 ~5분 → 동시 시작 ~2분.
+  # 같은 노드면 containerd image pull dedup 으로 한 번만 받음.
+  podManagementPolicy: Parallel
   selector:
     matchLabels: { app: av-muav }
   template:
