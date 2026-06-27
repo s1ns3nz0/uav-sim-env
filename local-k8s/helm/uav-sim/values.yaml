@@ -19,7 +19,7 @@ avMuav:
   # frame quadplane(VTOL) = throttle 받으면 즉시 수직 takeoff. fixed-wing(plane) 은
   # wheel friction + RC throttle stick raise 등 까다로워서 SITL 데모 비행 안 시작됨.
   image: av
-  frame: quadplane
+  frame: plane
   instance: "1"
   persona: /home/sitl/persona/muav_male.parm
   nodePool: sitl

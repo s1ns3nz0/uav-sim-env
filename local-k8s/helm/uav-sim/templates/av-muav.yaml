@@ -60,8 +60,22 @@ spec:
               export HOME_LON=$(awk -v b="$HOME_LON_BASE" -v o="$ORD" 'BEGIN{printf "%.6f", b + o*0.0008}')
               # SITL -I 가 SYSID_THISMAV 자동 분리 안 함 → persona 에 SYSID override 추가.
               # 합본 임시 파일 만들고 PERSONA_PARAM 가리키게. 모든 vehicle SysId = ORD+1.
+              # + fixed-wing 자동 takeoff PARAM 세트 (plane.parm default 에 부족함).
               FLEET_PARAM=/tmp/fleet-${ORD}.parm
-              echo "SYSID_THISMAV $((ORD+1))" > $FLEET_PARAM
+              cat > $FLEET_PARAM <<EOF
+              SYSID_THISMAV $((ORD+1))
+              TKOFF_THR_MAX 100
+              TKOFF_THR_MIN_ACC 0
+              TKOFF_THR_DELAY 0
+              TKOFF_LVL_PITCH 15
+              TKOFF_LVL_ALT 5
+              ARSPD_FBW_MIN 9
+              ARSPD_FBW_MAX 22
+              THR_MIN 0
+              THR_MAX 100
+              EOF
+              # heredoc 의 leading whitespace 가 PARAM 파싱 깨므로 sed 로 제거
+              sed -i 's/^[[:space:]]*//' $FLEET_PARAM
               cat "$PERSONA_PARAM" >> $FLEET_PARAM
               export PERSONA_PARAM=$FLEET_PARAM
               echo "[av-muav] ORD=$ORD INSTANCE=$INSTANCE PORT=$PORT SysId=$((ORD+1)) HOME=$HOME_LAT,$HOME_LON"
