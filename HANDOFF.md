@@ -1,7 +1,14 @@
 # HANDOFF → Claude Code
 
 이 문서는 진행 중인 작업을 Claude Code가 이어받기 위한 **컨텍스트 + 현재 블로커 + 잔여 로드맵**이다.
-바로 다음 작업(권장): **mission-planner 페이지로 9 stub HTTP 트래픽 자동화** (UAVC4I/MissionPlan/Weapon/Pgse/Maintenance/ThreatIntel/OpAudit/SarPayload/CyberPosture). 인프라(파이프) + SITL 트래픽은 끝, VM 폐기 완료.
+바로 다음 작업(권장): **mission-planner 페이지로 9 stub HTTP 트래픽 자동화** (UAVC4I/MissionPlan/Weapon/Pgse/Maintenance/ThreatIntel/OpAudit/SarPayload/CyberPosture). 인프라(파이프) + SITL 편대 트래픽은 끝, VM 폐기 완료.
+
+## F1 편대 3대 (2026-06-27) ✅
+- av-muav StatefulSet replicas=3, pod ordinal(0/1/2) 기반 wrapper 가 INSTANCE/HOME/router port/SYSID_THISMAV 동적 분리. `/tmp/fleet-N.parm` 합본으로 persona 위에 `SYSID_THISMAV (N+1)` override.
+- datalink-los entrypoint: `AV_REPLICAS` loop 으로 `av-muav-0/1/2.av-muav.air.svc` 별 TcpEndpoint 동적 추가 (image v2).
+- telemetry-tap tap.py: UAVId prefix(`MUAV-AKS`) + SysId 별 suffix(`-SYS001/002/003`). image v6.
+- 검증 (3분): UAVTelemetry_CL UAVId 분포 = SYS001 / SYS002 / SYS003 균등 약 5400 rows 씩.
+- 함정: `podManagementPolicy: Parallel` 은 sts immutable field → ArgoCD sync 전체 막힘. OrderedReady 그대로 두되 sitl 노드 image cached 라 부팅 빠름. `--add-param-file` 의 SYSID override 가 `--wipe-eeprom` 과 함께 동작 (EEPROM 비우고 매 boot 시 적용).
 
 ---
 
