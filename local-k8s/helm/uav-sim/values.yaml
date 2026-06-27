@@ -23,8 +23,8 @@ avMuav:
   nodePool: sitl
   home: { lat: "37.4030", lon: "127.1060", alt: "300", heading: "0" }
   resources:
-    # 편대 3대 = sitl 노드 D2s_v5(2vCPU) 에 들어가도록 req 낮춤. SITL CPU 평시 낮음.
-    requests: { cpu: "200m", memory: 384Mi }
+    # 편대 3대 = sitl 노드 D2s_v5(2vCPU)에 들어가도록 req 낮춤. SITL CPU 평시 낮음.
+    requests: { cpu: "100m", memory: 384Mi }
     limits:   { cpu: "2",    memory: 2Gi }
 
 # link — datalink-satcom (BLOS SATCOM 링크 + S3 태깅)
