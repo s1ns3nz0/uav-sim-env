@@ -19,3 +19,4 @@ docker-compose.override.yml
 
 # Bicep build artifacts
 infra/**/*.json
+.superpowers/
