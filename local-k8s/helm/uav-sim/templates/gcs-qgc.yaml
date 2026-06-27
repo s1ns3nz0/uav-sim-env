@@ -59,8 +59,10 @@ spec:
           volumeMounts:
             - { name: shm, mountPath: /dev/shm }
           resources:
-            requests: { cpu: "250m", memory: 512Mi }
-            limits:   { cpu: "1",    memory: 1536Mi }
+            # 편대 3대 mavlink rate 처리 + QGC UI thread 가 limit 1.0 거의 점유 →
+            # CPU throttle 로 mouse 이벤트 처리 지연(클릭 안 받힘). limit 2 로.
+            requests: { cpu: "300m", memory: 512Mi }
+            limits:   { cpu: "2",    memory: 1536Mi }
       volumes:
         - name: shm
           emptyDir: { medium: Memory, sizeLimit: 512Mi }
