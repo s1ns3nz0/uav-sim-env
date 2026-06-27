@@ -43,6 +43,9 @@ build_load() {
 }
 build_load uavsim/av:local              "$REPO/av-mpd"
 build_load uavsim/datalink-satcom:local "$REPO/datalink-satcom"
+build_load uavsim/datalink-los:local    "$REPO/datalink-los"
+build_load uavsim/telemetry-tap:local   "$REPO/telemetry-tap"
+build_load uavsim/gcs-qgc:local         "$REPO/gcs-qgc"
 build_load uavsim/mps:local             "$REPO/mps-stub"
 build_load uavsim/c4i:local             "$REPO/c4i-stub"
 # ground 스텁 (C-확장)
@@ -51,12 +54,20 @@ build_load uavsim/weapon:local          "$REPO/weapon-stub"
 build_load uavsim/ti:local              "$REPO/ti-stub"
 build_load uavsim/auth:local            "$REPO/auth-stub"
 build_load uavsim/cyber-posture:local   "$REPO/cyber-posture-stub"
+build_load uavsim/sar:local             "$REPO/sar-stub"
 
-echo "==> [5/5] 매니페스트 적용 (namespaces → NetworkPolicy → 워크로드)"
-kubectl apply -f "$HERE/manifests/"
+echo "==> [5/5] Helm install (AKS 와 동일 차트 — values-kind.yaml 오버라이드)"
+# AKS = helm + ArgoCD GitOps. kind 도 같은 차트 단일 진실. 이전엔 standalone
+# manifests/ 가 별도 트랙이었지만 편대/HOME/SOC 변경이 분기 → kind 측 미반영.
+# 지금은 manifests.legacy/ 로 deprecated, helm chart 만 사용.
+helm upgrade --install uav-sim "$HERE/helm/uav-sim" \
+  -f "$HERE/helm/uav-sim/values.yaml" \
+  -f "$HERE/helm/uav-sim/values-kind.yaml" \
+  --create-namespace --wait --timeout 5m
 
 echo
 echo "완료. 확인:"
 echo "  kubectl get ns"
 echo "  kubectl get pods -A -o wide        # NODE 열로 노드풀 배치 확인"
 echo "  bash $HERE/verify-netpol.sh         # 신뢰경계(air→ground 차단) 검증"
+echo "  bash $HERE/down.sh                  # 클러스터 종료"

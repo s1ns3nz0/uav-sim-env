@@ -1,0 +1,33 @@
+# kind 환경 오버라이드 — AKS 유사 노드풀(system/sitl/satcom) 모사 클러스터용.
+# 사용: helm install uav-sim ./helm/uav-sim -f values.yaml -f values-kind.yaml
+#
+# 차이점 (vs values-aks.yaml):
+#   - image.registry = uavsim (로컬 docker build → kind load), tag = local
+#   - SOC 일원화(fluentBit) 는 AKS 전용(Sentinel DCR 필요) → kind 에선 off
+#   - ingress(HTTPS LE) 는 도메인 필요 → kind 에선 off
+#   - resource req 작게 (worker 노드 CPU 제한)
+
+image:
+  registry: uavsim
+  tag: local
+  pullPolicy: IfNotPresent
+
+# 데이터패스 on
+datalinkLos:  { enabled: true }
+telemetryTap: { enabled: true, nodePool: sitl, uavId: "MUAV-KIND" }   # AKS 와 출처 분리
+gcsQgc:       { enabled: true }
+
+# AKS 전용 — kind 에선 비활성 (Sentinel DCR / LE cert 없음)
+fluentBit:    { enabled: false }
+ingress:      { enabled: false }
+
+# 편대 3대 — kind 의 sitl 워커 1대에 부담 큼. CPU req 더 낮춤(50m).
+avMuav:
+  resources:
+    requests: { cpu: "50m", memory: 256Mi }
+    limits:   { cpu: "1",   memory: 1Gi }
+
+# datalink-satcom UAV_ID 도 kind 출처 분리
+datalinkSatcom:
+  env:
+    UAV_ID: "MUAV-KIND-001"

@@ -22,7 +22,7 @@ compose 로는 검증 불가능한 **신뢰경계(NetworkPolicy)·기체 식별(
 
 ```bash
 cd local-k8s
-bash up.sh          # 클러스터 생성 → Calico → 노드풀 라벨 → 이미지 build+load → 매니페스트 적용
+bash up.sh          # 클러스터 생성 → Calico → 노드풀 라벨 → 이미지 build+load → helm install (uav-sim chart + values-kind.yaml)
 bash verify-netpol.sh   # 신뢰경계 검증 (air→ground 차단 / air→link 허용)
 bash down.sh        # 전체 삭제
 ```
