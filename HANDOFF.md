@@ -3,7 +3,15 @@
 이 문서는 진행 중인 작업을 Claude Code가 이어받기 위한 **컨텍스트 + 현재 블로커 + 잔여 로드맵**이다.
 바로 다음 작업(권장): **mission-planner 페이지로 9 stub HTTP 트래픽 자동화** (UAVC4I/MissionPlan/Weapon/Pgse/Maintenance/ThreatIntel/OpAudit/SarPayload/CyberPosture). 인프라(파이프) + SITL 편대 트래픽은 끝, VM 폐기 완료.
 
-## F1 편대 3대 (2026-06-27) ✅
+## F1 편대 3대 SITL 비행 (보류, 2026-06-27)
+- ArduPlane fixed-wing SITL 가 mode AUTO + Armed + MISSION_START 받은 후에도 throttle 0 유지. 시도한 PARAM:
+  - `TKOFF_THR_MAX 100`, `TKOFF_THR_MINACC 0`, `TKOFF_THR_MINSPD 0`, `TKOFF_THR_DELAY 0`, `TKOFF_LVL_PITCH 15`, `TKOFF_LVL_ALT 5` (wrapper 합본 + runtime PARAM_SET)
+  - `THR_SUPP_MAN 0`, `THR_FAILSAFE 0` (manual throttle suppress 해제)
+  - RC override CH3=2000 (full throttle)
+- 다 효과 없음. 원인 의심: SITL plane model 의 ground physics(wheel friction) + simulated RC throttle=0 의 조합. ArduPlane "hand_launch" (accelerometer trigger) 도 SITL 에서 시뮬 불가.
+- 우회 옵션 (후속): `sim_vehicle.py --in-air` 모드, `SIM_TYPE`/`SIM_OPTS` 튜닝, 또는 frame `quadplane` 유지하고 `Q_OPTIONS` 로 VTOL transition (의미상 quadplane 은 의도 아님).
+
+## F1 편대 3대 인프라 (2026-06-27) ✅
 - av-muav StatefulSet replicas=3, pod ordinal(0/1/2) 기반 wrapper 가 INSTANCE/HOME/router port/SYSID_THISMAV 동적 분리. `/tmp/fleet-N.parm` 합본으로 persona 위에 `SYSID_THISMAV (N+1)` override.
 - datalink-los entrypoint: `AV_REPLICAS` loop 으로 `av-muav-0/1/2.av-muav.air.svc` 별 TcpEndpoint 동적 추가 (image v2).
 - telemetry-tap tap.py: UAVId prefix(`MUAV-AKS`) + SysId 별 suffix(`-SYS001/002/003`). image v6.
