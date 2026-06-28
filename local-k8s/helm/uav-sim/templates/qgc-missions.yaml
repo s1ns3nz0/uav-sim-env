@@ -1,0 +1,15 @@
+# 편대 mission plan (안흥 활주로 patrol + LAND) 영구 저장.
+# gcs-qgc Deployment 에 /home/qgc/missions 로 마운트 — AKS stop/start 또는 pod
+# 재시작 후에도 plan 파일 유지. QGC 에서 File > Open → /home/qgc/missions/v{N}.plan
+{{- if .Values.gcsQgc.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: qgc-missions
+  namespace: ground
+data:
+  {{- range $path, $_ := .Files.Glob "files/missions/*.plan" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+  {{- end }}
+{{- end }}

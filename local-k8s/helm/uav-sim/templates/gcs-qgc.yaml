@@ -63,6 +63,7 @@ spec:
             - { name: mavlink, containerPort: 14550, protocol: UDP }
           volumeMounts:
             - { name: shm, mountPath: /dev/shm }
+            - { name: missions, mountPath: /home/qgc/missions, readOnly: true }
           resources:
             # 편대 3대 mavlink rate 처리 + QGC UI thread 가 limit 1.0 거의 점유 →
             # CPU throttle 로 mouse 이벤트 처리 지연(클릭 안 받힘). limit 2 로.
@@ -71,5 +72,7 @@ spec:
       volumes:
         - name: shm
           emptyDir: { medium: Memory, sizeLimit: 512Mi }
+        - name: missions
+          configMap: { name: qgc-missions }
 {{- end }}
 {{- end }}
