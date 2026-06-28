@@ -23,7 +23,7 @@ avMuav:
   instance: "1"
   persona: /home/sitl/persona/muav_male.parm
   nodePool: sitl
-  home: { lat: "36.7100", lon: "126.1300", alt: "20", heading: "0" }   # ADD 안흥 시험비행장 (충남 태안) — KUS-FS MUAV 실 시험지 (의미 일치)
+  home: { lat: "39.0000", lon: "125.7000", alt: "30", heading: "0" }   # 평양 외곽 (북한 영공 가상 시뮬용) — formation patrol 시연용
   resources:
     # 편대 3대 = sitl 노드 D2s_v5(2vCPU)에 들어가도록 req 낮춤. SITL CPU 평시 낮음.
     requests: { cpu: "100m", memory: 384Mi }
@@ -42,6 +42,20 @@ datalinkSatcom:
     SRC_ADDR: "10.60.0.10"
     DST_ADDR: "10.60.0.20"
     LOG_FILE_PATH: /dev/stdout      # NDJSON → stdout → Fluent Bit → Logs Ingestion → UAVSatcomLink_CL
+
+# counter-uas — 카운터 드론 RF 탐지→근접→자동재밍 시뮬(송신 없음, ground 자산)
+counterUas:
+  enabled: true
+  image: counter-uas
+  nodePool: system
+  env:
+    ASSET_ID: "CUAS-SITE-1"
+    TICK_SEC: "1.0"
+    JAM_THRESHOLD_M: "200"      # 재밍 작동 근접 임계(m)
+    JAM_EIRP_DBM: "33"          # 재밍 EIRP(시뮬 — 실제 송신 없음)
+    JAM_ROE: "auto"             # auto=근접 자동재밍 / manual=권고만
+    RX_SENSITIVITY_DBM: "-95"
+    LOG_FILE_PATH: /dev/stdout  # NDJSON → stdout → Fluent Bit → UAVCounterUas_CL
 
 # c4i — c4i-stub (ATCIS/MIMS 핸드오프 종단)
 c4i:
