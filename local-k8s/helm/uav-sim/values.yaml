@@ -23,7 +23,7 @@ avMuav:
   instance: "1"
   persona: /home/sitl/persona/muav_male.parm
   nodePool: sitl
-  home: { lat: "39.0000", lon: "125.7000", alt: "30", heading: "0" }   # 평양 외곽 (북한 영공 가상 시뮬용) — formation patrol 시연용
+  home: { lat: "39.2239", lon: "125.6700", alt: "35", heading: "350" }   # 평양 순안 국제공항 (FNJ/ZKPY) RWY 35 활주로 — 북한 영공 시뮬
   resources:
     # 편대 3대 = sitl 노드 D2s_v5(2vCPU)에 들어가도록 req 낮춤. SITL CPU 평시 낮음.
     requests: { cpu: "100m", memory: 384Mi }
