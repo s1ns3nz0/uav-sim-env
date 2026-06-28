@@ -1,15 +1,30 @@
-# 편대 mission plan (안흥 활주로 patrol + LAND) 영구 저장.
-# gcs-qgc Deployment 에 /home/qgc/missions 로 마운트 — AKS stop/start 또는 pod
-# 재시작 후에도 plan 파일 유지. QGC 에서 File > Open → /home/qgc/missions/v{N}.plan
+# 편대 mission plan 영구 저장 — 시나리오별 ConfigMap (5개) + Deployment 의 subdir 마운트.
+# QGC 의 File > Open 에서 /home/qgc/missions/<scenario>/v{N}.plan 로 직접 접근.
 {{- if .Values.gcsQgc.enabled }}
+{{- $scenarios := dict }}
+{{- range $path, $_ := .Files.Glob "files/missions/**/*.plan" }}
+  {{- $rel := trimPrefix "files/missions/" $path }}
+  {{- $parts := splitList "/" $rel }}
+  {{- $sc := index $parts 0 }}
+  {{- $file := index $parts 1 }}
+  {{- $list := index $scenarios $sc | default (dict) }}
+  {{- $_ := set $list $file $path }}
+  {{- $_ := set $scenarios $sc $list }}
+{{- end }}
+{{- range $sc, $files := $scenarios }}
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: qgc-missions
+  name: qgc-missions-{{ $sc }}
   namespace: ground
+  labels:
+    app: gcs-qgc
+    mission-scenario: {{ $sc }}
 data:
-  {{- range $path, $_ := .Files.Glob "files/missions/*.plan" }}
-  {{ base $path }}: |
+  {{- range $file, $path := $files }}
+  {{ $file }}: |
 {{ $.Files.Get $path | indent 4 }}
   {{- end }}
+{{- end }}
 {{- end }}

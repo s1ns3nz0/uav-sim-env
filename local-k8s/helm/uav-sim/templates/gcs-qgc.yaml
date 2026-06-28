@@ -63,7 +63,17 @@ spec:
             - { name: mavlink, containerPort: 14550, protocol: UDP }
           volumeMounts:
             - { name: shm, mountPath: /dev/shm }
-            - { name: missions, mountPath: /home/qgc/missions, readOnly: true }
+            # 시나리오별 ConfigMap 을 /home/qgc/missions/<scenario>/ 로 각각 마운트.
+            # 새 시나리오 추가 = files/missions/<name>/v{1,2,3}.plan 박은 뒤 차트 sync.
+            {{- $sset := dict }}
+            {{- range $p, $_ := $.Files.Glob "files/missions/**/*.plan" }}
+            {{- $rel := trimPrefix "files/missions/" $p }}
+            {{- $sc := index (splitList "/" $rel) 0 }}
+            {{- $_ := set $sset $sc true }}
+            {{- end }}
+            {{- range $sc, $_ := $sset }}
+            - { name: missions-{{ $sc }}, mountPath: /home/qgc/missions/{{ $sc }}, readOnly: true }
+            {{- end }}
           resources:
             # 편대 3대 mavlink rate 처리 + QGC UI thread 가 limit 1.0 거의 점유 →
             # CPU throttle 로 mouse 이벤트 처리 지연(클릭 안 받힘). limit 2 로.
@@ -72,7 +82,15 @@ spec:
       volumes:
         - name: shm
           emptyDir: { medium: Memory, sizeLimit: 512Mi }
-        - name: missions
-          configMap: { name: qgc-missions }
+        {{- $sset := dict }}
+        {{- range $p, $_ := $.Files.Glob "files/missions/**/*.plan" }}
+        {{- $rel := trimPrefix "files/missions/" $p }}
+        {{- $sc := index (splitList "/" $rel) 0 }}
+        {{- $_ := set $sset $sc true }}
+        {{- end }}
+        {{- range $sc, $_ := $sset }}
+        - name: missions-{{ $sc }}
+          configMap: { name: qgc-missions-{{ $sc }} }
+        {{- end }}
 {{- end }}
 {{- end }}
