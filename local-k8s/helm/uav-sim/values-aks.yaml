@@ -15,7 +15,7 @@ telemetryTap:
   stdoutMode: true               # 7 NDJSON 전부 /dev/stdout → FB tail 가능
   imageTag: v6                   # UAVId = prefix + SysId suffix (편대)
   uavId: "MUAV-AKS"              # prefix 만 — 코드가 "-SYS001/002/003" 박음
-gcsQgc:       { enabled: true }
+gcsQgc:       { enabled: true, imageTag: v2 }   # v2: nginx access log emitter (UAVGcsAccess_CL)
 fluentBit:    { enabled: true }   # AKS NDJSON → Sentinel 일원화
 ingress:      { enabled: true }   # https://sim.pollak.store (cert-manager + ingress-nginx)
 

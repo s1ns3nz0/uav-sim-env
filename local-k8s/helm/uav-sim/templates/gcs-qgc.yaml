@@ -51,7 +51,7 @@ spec:
       {{- end }}
       containers:
         - name: gcs-qgc
-          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ default $.Values.image.tag .imageTag }}
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           env:
             - { name: MAVLINK_IN_PORT, value: {{ .mavlinkInPort | quote }} }
