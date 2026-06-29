@@ -78,5 +78,7 @@ EOF
     done
 fi
 
-echo "[datalink-los] launching mavlink-router (conf=$CONF)"
-exec mavlink-routerd -c "$CONF"
+echo "[datalink-los] launching mavlink-router (conf=$CONF) → router_stats_to_ndjson sidecar"
+# stdout+stderr → router_stats_to_ndjson parser → container stdout (NDJSON for UAVRouterStats_CL).
+# Parser 가 stats block 만 NDJSON 으로 변환, 평문은 stderr 로 passthrough → marker EndpointName 없는 라인 자연 drop.
+exec mavlink-routerd -c "$CONF" 2>&1 | python3 -u /usr/local/bin/router_stats_to_ndjson.py

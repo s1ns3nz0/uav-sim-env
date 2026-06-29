@@ -150,6 +150,8 @@ fluentBit:
     - { container: telemetry-tap,      dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVMavsec",       marker: "StreamMavsec" }
     # sar-stub (ext2 DCR). marker FrameId 는 NDJSON 만 보유.
     - { container: sar-stub,           dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVSarPayload",   marker: "FrameId" }
+    # datalink-los (ext2 DCR) — mavlink-router stats sidecar NDJSON. marker EndpointName.
+    - { container: datalink-los,       dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVRouterStats",  marker: "EndpointName" }
     # gcs-qgc nginx access log → UAVGcsAccess_CL. 테이블·DCR 소유권 pollack-ai (dah-sentinel-content lane).
     # DCR = dcr-uav-soc (pollack-ai/deploy/sentinel-tables 배포), SP Monitoring Metrics Publisher 권한 부여 완료.
     # marker=Transport — nginx log_format gcs_ndjson 항상 채움(novnc), uvicorn 등 평문 거름.

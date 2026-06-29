@@ -8,7 +8,7 @@ image:
 # AKS 에서 데이터패스 on (kind 는 off)
 datalinkLos:
   enabled: true
-  imageTag: v2                   # 편대 N TcpEndpoint loop (av-muav-0/1/2)
+  imageTag: v3                   # v3: router_stats_to_ndjson sidecar (UAVRouterStats_CL emit)
 telemetryTap:
   enabled: true
   nodePool: sitl                 # system 풀 maxPods=30 회피

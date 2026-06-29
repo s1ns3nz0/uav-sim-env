@@ -25,8 +25,9 @@ RUN git clone --recursive --depth 1 https://github.com/mavlink-router/mavlink-ro
     rm -rf /tmp/mavlink-router
 
 COPY mavlink-router.conf /etc/mavlink-router/main.conf
+COPY router_stats_to_ndjson.py /usr/local/bin/router_stats_to_ndjson.py
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/router_stats_to_ndjson.py
 
 EXPOSE 14550/udp 14551/udp 14552/udp
 ENTRYPOINT ["/entrypoint.sh"]
