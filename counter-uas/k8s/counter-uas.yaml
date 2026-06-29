@@ -1,0 +1,50 @@
+{{- /*
+  counter-uas — 카운터 드론 RF 탐지→근접→자동재밍 시뮬(송신 없음).
+  이 파일을 local-k8s/helm/uav-sim/templates/ 로 복사하면 helm 차트에 편입된다.
+  NDJSON(/dev/stdout) → fluent-bit → Logs Ingestion → UAVCounterUas_CL.
+*/}}
+{{- with .Values.counterUas }}
+{{- if .enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: counter-uas
+  namespace: ground
+  labels: { app: counter-uas }
+spec:
+  selector: { app: counter-uas }
+  ports: [ { name: control, port: 8810, targetPort: 8810 } ]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: counter-uas
+  namespace: ground
+  labels: { app: counter-uas }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: counter-uas }
+  template:
+    metadata:
+      labels: { app: counter-uas }
+    spec:
+      nodeSelector: { pool: {{ .nodePool }} }
+      containers:
+        - name: counter-uas
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            {{- range $k, $v := .env }}
+            - { name: {{ $k }}, value: {{ $v | quote }} }
+            {{- end }}
+          ports: [ { name: control, containerPort: 8810 } ]
+          readinessProbe:
+            httpGet: { path: /health, port: 8810 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests: { cpu: "50m", memory: 96Mi }
+            limits:   { cpu: "300m", memory: 192Mi }
+{{- end }}
+{{- end }}

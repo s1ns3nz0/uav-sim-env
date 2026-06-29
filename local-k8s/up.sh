@@ -55,6 +55,8 @@ build_load uavsim/ti:local              "$REPO/ti-stub"
 build_load uavsim/auth:local            "$REPO/auth-stub"
 build_load uavsim/cyber-posture:local   "$REPO/cyber-posture-stub"
 build_load uavsim/sar:local             "$REPO/sar-stub"
+# counter-uas (카운터 드론 RF 탐지→근접→자동재밍 시뮬, 송신 없음)
+build_load uavsim/counter-uas:local     "$REPO/counter-uas"
 
 echo "==> [5/5] Helm install (AKS 와 동일 차트 — values-kind.yaml 오버라이드)"
 # AKS = helm + ArgoCD GitOps. kind 도 같은 차트 단일 진실. 이전엔 standalone
