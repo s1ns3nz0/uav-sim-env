@@ -683,28 +683,7 @@ resource uavSarPayload 'Microsoft.OperationalInsights/workspaces/tables@2023-09-
   }
 }
 
-// GCS 원격접속(noVNC/VNC) 감사 — gcs-qgc gcs-access.ndjson.
-resource uavGcsAccess 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
-  parent: law
-  name: 'UAVGcsAccess_CL'
-  properties: {
-    plan: 'Analytics'
-    retentionInDays: 90
-    totalRetentionInDays: 365
-    schema: {
-      name: 'UAVGcsAccess_CL'
-      columns: [
-        { name: 'TimeGenerated', type: 'datetime' }
-        { name: 'ClientIp', type: 'string' }
-        { name: 'Transport', type: 'string' }
-        { name: 'SessionStart', type: 'datetime' }
-        { name: 'SessionEnd', type: 'datetime' }
-        { name: 'UserAgent', type: 'string' }
-        { name: 'BytesTransferred', type: 'long' }
-      ]
-    }
-  }
-}
+// UAVGcsAccess_CL 정의는 pollack-ai/deploy/sentinel-tables (dcr-uav-soc) 가 소유 — 여기서는 빠짐.
 
 // mavlink-router 내부 통계 — datalink-los router-stats.ndjson.
 resource uavRouterStats 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
@@ -775,6 +754,5 @@ output resourceMetricsTableName string = uavResourceMetrics.name
 output datalinkConnTableName string = uavDatalinkConn.name
 output satcomLinkTableName string = uavSatcomLink.name
 output sarPayloadTableName string = uavSarPayload.name
-output gcsAccessTableName string = uavGcsAccess.name
 output routerStatsTableName string = uavRouterStats.name
 output fleetStateTableName string = uavFleetState.name

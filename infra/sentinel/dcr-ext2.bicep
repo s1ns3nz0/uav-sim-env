@@ -1,6 +1,7 @@
-// Tertiary DCR — KUS-FS 확장(편대 + SATCOM) 신규 5개 스트림.
+// Tertiary DCR — KUS-FS 확장(편대 + SATCOM) 4개 스트림.
 // primary(dcr.bicep, 10) / extras(dcr-extras.bicep, 9)가 10-logFiles/DCR 한계에
 // 가까워 신규 테이블은 이 세 번째 DCR로 분리한다. 동일 DCE + workspace 사용.
+// UAVGcsAccess_CL 은 pollack-ai/deploy/sentinel-tables 의 dcr-uav-soc 로 이관(소유권 SOC).
 //
 //   az deployment group create -g dah-data-rg -f dcr-ext2.bicep -n dcr-ext2-mvp \
 //     -p workspaceName=dah-data-law
@@ -20,8 +21,7 @@ param satcomLogPath string = '/var/log/uav-sim-env/satcom.ndjson'
 @description('SAR 페이로드 프레임 메타 NDJSON 경로 (sar-stub).')
 param sarLogPath string = '/var/log/uav-sim-env/sar.ndjson'
 
-@description('GCS 원격접속 감사 NDJSON 경로 (gcs-qgc).')
-param gcsAccessLogPath string = '/var/log/uav-sim-env/gcs-access.ndjson'
+// UAVGcsAccess_CL 정의는 pollack-ai/deploy/sentinel-tables (dcr-uav-soc) 가 소유 — 여기서는 빠짐.
 
 @description('mavlink-router 내부 통계 NDJSON 경로 (datalink-los).')
 param routerStatsLogPath string = '/var/log/uav-sim-env/router-stats.ndjson'
@@ -34,13 +34,11 @@ var dcrName = '${namePrefix}-uav-dcr-ext2'
 
 var satcomStreamName = 'Custom-UAVSatcomLink'
 var sarStreamName = 'Custom-UAVSarPayload'
-var gcsAccessStreamName = 'Custom-UAVGcsAccess'
 var routerStatsStreamName = 'Custom-UAVRouterStats'
 var fleetStateStreamName = 'Custom-UAVFleetState'
 
 var satcomTableName = 'UAVSatcomLink_CL'
 var sarTableName = 'UAVSarPayload_CL'
-var gcsAccessTableName = 'UAVGcsAccess_CL'
 var routerStatsTableName = 'UAVRouterStats_CL'
 var fleetStateTableName = 'UAVFleetState_CL'
 
@@ -76,16 +74,6 @@ var sarStreamColumns = [
   { name: 'SizeBytes', type: 'long' }
 ]
 
-var gcsAccessStreamColumns = [
-  { name: 'TimeGenerated', type: 'datetime' }
-  { name: 'ClientIp', type: 'string' }
-  { name: 'Transport', type: 'string' }
-  { name: 'SessionStart', type: 'datetime' }
-  { name: 'SessionEnd', type: 'datetime' }
-  { name: 'UserAgent', type: 'string' }
-  { name: 'BytesTransferred', type: 'long' }
-]
-
 var routerStatsStreamColumns = [
   { name: 'TimeGenerated', type: 'datetime' }
   { name: 'EndpointName', type: 'string' }
@@ -114,7 +102,6 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
     streamDeclarations: {
       '${satcomStreamName}': { columns: satcomStreamColumns }
       '${sarStreamName}': { columns: sarStreamColumns }
-      '${gcsAccessStreamName}': { columns: gcsAccessStreamColumns }
       '${routerStatsStreamName}': { columns: routerStatsStreamColumns }
       '${fleetStateStreamName}': { columns: fleetStateStreamColumns }
     }
@@ -122,7 +109,6 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       logFiles: [
         { name: 'uavSatcomFile', streams: [ satcomStreamName ], filePatterns: [ satcomLogPath ], format: 'json' }
         { name: 'uavSarFile', streams: [ sarStreamName ], filePatterns: [ sarLogPath ], format: 'json' }
-        { name: 'uavGcsAccessFile', streams: [ gcsAccessStreamName ], filePatterns: [ gcsAccessLogPath ], format: 'json' }
         { name: 'uavRouterStatsFile', streams: [ routerStatsStreamName ], filePatterns: [ routerStatsLogPath ], format: 'json' }
         { name: 'uavFleetStateFile', streams: [ fleetStateStreamName ], filePatterns: [ fleetStateLogPath ], format: 'json' }
       ]
@@ -135,7 +121,6 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
     dataFlows: [
       { streams: [ satcomStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${satcomTableName}' }
       { streams: [ sarStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${sarTableName}' }
-      { streams: [ gcsAccessStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${gcsAccessTableName}' }
       { streams: [ routerStatsStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${routerStatsTableName}' }
       { streams: [ fleetStateStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${fleetStateTableName}' }
     ]

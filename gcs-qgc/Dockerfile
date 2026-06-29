@@ -13,7 +13,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl wget grep \
         squashfs-tools binutils \
-        xvfb x11vnc fluxbox novnc websockify supervisor \
+        xvfb x11vnc fluxbox novnc websockify supervisor nginx \
         libgl1-mesa-glx libxkbcommon0 libxkbcommon-x11-0 libpulse0 libnss3 \
         libxcomposite1 libxdamage1 libxrandr2 libxi6 libxcursor1 libxtst6 \
         libfontconfig1 libdbus-1-3 libsm6 libxext6 libxrender1 \
@@ -48,6 +48,8 @@ RUN useradd -m -s /bin/bash -u 1000 qgc
 COPY missions/ /home/qgc/missions/
 RUN chown -R qgc:qgc /home/qgc/missions
 COPY supervisord.conf /etc/supervisor/conf.d/qgc.conf
+COPY nginx.conf /etc/nginx/nginx.conf
+RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default.conf
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
