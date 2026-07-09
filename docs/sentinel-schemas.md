@@ -984,6 +984,66 @@ UAVSatcomLink_CL
 - `EventType="rf_detection", Band="2.4GHz", Classification="hostile", EstRange_m=210, TrueRange_m=204` → 적성 2.4GHz emitter가 210m 추정거리로 접근 탐지(S62 다중센서/근접 정찰 정황).
 - `EventType="jam_engagement", TargetBand="2.4GHz", JsRatio_dB=18.2, Effect="link_denied", Status="jammed", ReasonCode="proximity_auto"` → 근접임계 이내 hostile 트랙에 자동 재밍 발동, 링크 차단 성공(S30/S31 카운터 대응 폐루프 증거).
 
+### 20.7 `UAVWebAudit_CL` (A순위 — IT 계층 완전 사각지대, 킬체인 C16 "최악의 공백" 해소)
+- **출처**: `web-stub`(신규, `web.ndjson`) — S48~S52 IT 계층 공격면(인증우회/IDOR·웹셸업로드·SUID/GTFOBins·컨테이너escape·cron하이재킹) 시뮬레이션. **이 repo의 UAV Sentinel은 원래 기체 텔레메트리 평면만 봤고, IT 계층 공격을 낼 서비스 자체가 없어(docs §16, 킬체인 C15/C16) 완전 사각지대였다.**
+- **안전 설계**: `datalink-satcom`의 `/satcom/inject`, `counter-uas`의 "실제 송신 없음"과 동일한 원칙 — 각 엔드포인트는 기법의 **탐지 가능한 시그니처를 명시적 제어 호출로 시뮬레이션**할 뿐, 실제로 착취 가능한 원시 기능(진짜 웹셸 실행·진짜 SUID 권한상승·진짜 컨테이너 이스케이프·진짜 crontab 설치)은 구현하지 않는다.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| EventType | string | `operator_profile_access`(S48)/`imagery_upload`(S49)/`host_exec_attempt`(S50)/`container_escape_attempt`(S51)/`cron_entry_installed`(S52) |
+| RequesterId, TargetId | string | S48 — 세션 소유자 vs 요청 대상 리소스 ID |
+| IdorSuspected | boolean | S48 핵심 — `RequesterId != TargetId`면 `true` |
+| Filename, ContentSnippet | string | S49 — 업로드 파일명/내용(앞 200자) |
+| WebshellSignatureDetected, MatchedPattern | boolean, string | S49 핵심 — `<?php`/`eval(`/`system(` 등 시그니처 매칭 여부·매칭 패턴 |
+| Binary, Args | string | S50 — 실행 시도한 바이너리/인자 |
+| GtfobinsMatch | boolean | S50 핵심 — 알려진 GTFOBins 목록(`find`/`vim`/`python3` 등) 매칭 여부 |
+| PrivilegeBefore, PrivilegeAfter | string | S50 — 시뮬레이션된 권한 전이(`operator`→`root`) |
+| EscapeMethod, TargetPath | string | S51 — `docker_sock_mount`/`privileged_flag`/`hostpath_mount`/`cap_sys_admin` |
+| CronEntry, InstalledBy | string | S52 — 설치 시도한 cron 항목/설치 주체 |
+| StatusCode | int | 처리 코드 |
+
+**예시 값과 의미**
+- `EventType="operator_profile_access", RequesterId="operator-01", TargetId="operator-02", IdorSuspected=true` → 킬체인 C18 예시(`GET /weapon/operator-02`)와 동일 패턴 — 다른 운영자 리소스에 세션 불일치 접근.
+- `EventType="imagery_upload", Filename="imagery.php", WebshellSignatureDetected=true, MatchedPattern="system\\s*\\("` → C15/C16 웹셸 업로드 시도.
+- `EventType="host_exec_attempt", Binary="find", GtfobinsMatch=true, PrivilegeAfter="root"` → C16 SUID/GTFOBins 권한상승.
+- `EventType="container_escape_attempt", EscapeMethod="docker_sock_mount", TargetPath="/var/run/docker.sock"` → C15/C16 컨테이너 escape 시도.
+- `EventType="cron_entry_installed", CronEntry="* * * * * root /opt/rogue"` → C16 cron 지속성 설치.
+
+### 시나리오 매핑
+- **S48 IDOR** — `EventType == "operator_profile_access" and IdorSuspected == true`
+- **S49 웹셸** — `EventType == "imagery_upload" and WebshellSignatureDetected == true`
+- **S50 SUID/GTFOBins** — `EventType == "host_exec_attempt" and GtfobinsMatch == true`
+- **S51 컨테이너 escape** — `EventType == "container_escape_attempt"`
+- **S52 cron 하이재킹** — `EventType == "cron_entry_installed"`
+- **C16 완전은밀 체인** — 위 5개 EventType 이 짧은 시간창에 순서대로(웹셸→SUID→escape→cron) 발생하면 순수 IT 권한상승 체인
+
+### 20.8 `UAVArchiveAudit_CL` (B순위 — 공급망 아카이브 전달 벡터)
+- **출처**: `web-stub`(`web-archive.ndjson`) — S53(Zip Slip)·S54(tar 심볼릭 링크 탈출)·S55(절대경로 추출). `mode="vulnerable"`은 실제 zip 추출 시 경로 검증을 생략해 진짜 Zip Slip을 재현하지만, 매 요청마다 새로 만드는 임시 디렉터리(`tempfile.TemporaryDirectory()`)에서만 벌어지고 요청이 끝나면 통째로 삭제된다 — 실제 피해 반경은 컨테이너 내 임시저장소로 격리.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| EventType | string | `archive_entry_extracted`(엔트리별) / `archive_extract_summary`(요약) |
+| ArchiveName | string | 업로드된 아카이브 이름 |
+| Mode | string | `safe`(경로 검증 적용) / `vulnerable`(Zip Slip 재현) |
+| EntryPath | string | 아카이브 내부 엔트리 경로(예: `../../../opt/uav/startup.d/rogue.sh`) |
+| PathTraversalDetected | boolean | 엔트리 경로에 `..` 포함 — **S53 핵심** |
+| AbsolutePathDetected | boolean | 엔트리 경로가 절대경로 — **S55 핵심** |
+| SymlinkEscapeDetected | boolean | tar 멤버가 심볼릭/하드링크 — **S54 핵심** |
+| ExtractedCount, BlockedCount | int | `archive_extract_summary` 전용 — 실제 추출/차단된 엔트리 수 |
+| StatusCode | int | 처리 코드 |
+
+**예시 값과 의미**
+- `EventType="archive_entry_extracted", EntryPath="../../../opt/uav/startup.d/rogue.sh", PathTraversalDetected=true, Mode="vulnerable"` → 킬체인 C14 예시와 동일한 Zip Slip 엔트리, 취약 모드라 실제로 상위 경로에 쓰기 시도.
+- `EventType="archive_extract_summary", Mode="safe", BlockedCount=1, ExtractedCount=4` → 안전 모드는 경로순회 엔트리 1개를 차단하고 나머지만 추출.
+
+### 시나리오 매핑
+- **S53 Zip Slip** — `EventType == "archive_entry_extracted" and PathTraversalDetected == true`
+- **S54 tar 심볼릭 탈출** — `EventType == "archive_entry_extracted" and SymlinkEscapeDetected == true`
+- **S55 절대경로 추출** — `EventType == "archive_entry_extracted" and AbsolutePathDetected == true`
+- **C14/C17 공급망 아카이브 전달** — 이 테이블에서 탐지 후 하류 `UAVPgse_CL`(펌웨어 변조)·`UAVWebAudit_CL`(웹셸) 시간 인접 상관
+
 ### 보류 (표준 솔루션으로 충분 / 비용 대비 낮음)
 - ArduPilot dataflash(.bin)·콘솔 로그 — 대용량, MAVLink로 대부분 커버.
 - OS/호스트(Syslog·AzureActivity·네트워크 egress) — `vm-monitoring`/`azure-activity` 표준 수집.

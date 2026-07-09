@@ -49,6 +49,13 @@ spec:
             {{- else }}
             - { name: LOG_FILE_PATH, value: /var/log/uav-sim-env/{{ .logFile }} }
             {{- end }}
+            {{- if .archiveLogFile }}
+            {{- if $.Values.groundStubsLogToStdout }}
+            - { name: ARCHIVE_LOG_FILE_PATH, value: /dev/stdout }
+            {{- else }}
+            - { name: ARCHIVE_LOG_FILE_PATH, value: /var/log/uav-sim-env/{{ .archiveLogFile }} }
+            {{- end }}
+            {{- end }}
             {{- range $k, $v := .extraEnv }}
             - { name: {{ $k }}, value: {{ $v | quote }} }
             {{- end }}

@@ -298,6 +298,23 @@ services:
       - "8000:8000"
     restart: unless-stopped
 
+  web-stub:
+    build:
+      context: ./web-stub
+    container_name: uav-web-stub
+    hostname: web-stub
+    networks:
+      uas-los:
+        ipv4_address: 10.50.0.130
+    environment:
+      LOG_FILE_PATH: "/var/log/uav-sim-env/web.ndjson"
+      ARCHIVE_LOG_FILE_PATH: "/var/log/uav-sim-env/web-archive.ndjson"
+    volumes:
+      - /var/log/uav-sim-env:/var/log/uav-sim-env
+    ports:
+      - "8900:8900"
+    restart: unless-stopped
+
   gcs-qgc:
     # profile 로 분리 — GCS 는 이제 AKS(gcs-qgc-lb, sim.pollak.store)가 서빙.
     # VM 기본 `docker compose up -d`(systemd)에는 안 뜬다. 로컬에서 굳이 띄우려면

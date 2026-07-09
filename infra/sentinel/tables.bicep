@@ -791,6 +791,70 @@ resource uavCounterUas 'Microsoft.OperationalInsights/workspaces/tables@2023-09-
   }
 }
 
+// web-stub IT 계층 공격면(S48~S52) — 인증우회/IDOR·웹셸업로드·SUID/GTFOBins·
+// 컨테이너escape·cron하이재킹. web.ndjson.
+resource uavWebAudit 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVWebAudit_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVWebAudit_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'RequesterId', type: 'string' }
+        { name: 'TargetId', type: 'string' }
+        { name: 'IdorSuspected', type: 'boolean' }
+        { name: 'Filename', type: 'string' }
+        { name: 'ContentSnippet', type: 'string' }
+        { name: 'WebshellSignatureDetected', type: 'boolean' }
+        { name: 'MatchedPattern', type: 'string' }
+        { name: 'Binary', type: 'string' }
+        { name: 'Args', type: 'string' }
+        { name: 'GtfobinsMatch', type: 'boolean' }
+        { name: 'PrivilegeBefore', type: 'string' }
+        { name: 'PrivilegeAfter', type: 'string' }
+        { name: 'EscapeMethod', type: 'string' }
+        { name: 'TargetPath', type: 'string' }
+        { name: 'CronEntry', type: 'string' }
+        { name: 'InstalledBy', type: 'string' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
+// web-stub 아카이브 추출(S53~S55) — Zip Slip·tar 심볼릭링크 탈출·절대경로.
+// web-archive.ndjson.
+resource uavArchiveAudit 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVArchiveAudit_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVArchiveAudit_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'ArchiveName', type: 'string' }
+        { name: 'Mode', type: 'string' }
+        { name: 'EntryPath', type: 'string' }
+        { name: 'PathTraversalDetected', type: 'boolean' }
+        { name: 'AbsolutePathDetected', type: 'boolean' }
+        { name: 'SymlinkEscapeDetected', type: 'boolean' }
+        { name: 'ExtractedCount', type: 'int' }
+        { name: 'BlockedCount', type: 'int' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
 output tableName string = uavTelemetry.name
 output tableId string = uavTelemetry.id
 output pgseTableName string = uavPgse.name
@@ -819,3 +883,5 @@ output routerStatsTableName string = uavRouterStats.name
 output fleetStateTableName string = uavFleetState.name
 output counterUasTableName string = uavCounterUas.name
 output counterUasTableId string = uavCounterUas.id
+output webAuditTableName string = uavWebAudit.name
+output archiveAuditTableName string = uavArchiveAudit.name

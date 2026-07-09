@@ -84,6 +84,10 @@ groundStubs:
       extraEnv: { SESSION_TTL_SEC: "3600" } }
   - { name: cyber-posture-stub,  image: cyber-posture,  port: 8300, logFile: cyber-posture.ndjson }
   - { name: sar-stub,            image: sar,            port: 8700, logFile: sar.ndjson }
+  # web-stub — IT 계층 공격면 시뮬레이션(S48~S55). UAVWebAudit_CL(주) +
+  # UAVArchiveAudit_CL(아카이브 추출, 별도 마커) 2 스트림이 같은 stdout 에 섞임.
+  - { name: web-stub,            image: web-stub,       port: 8900, logFile: web.ndjson,
+      archiveLogFile: web-archive.ndjson }
 
 # pgse 의 승인 펌웨어 DB (ConfigMap 내용)
 approvedFirmware: |
@@ -168,6 +172,9 @@ fluentBit:
     - { container: counter-uas,        dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVCounterUas",   marker: "EventType" }
     # service-audit (primary DCR) — Kubernetes Event 기반 파드 생애주기. marker EventType(예: "Pod").
     - { container: service-audit,      dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVServiceAudit", marker: "EventType" }
+    # web-stub (ext2 DCR) — IT 계층 공격면(S48~S55). 같은 stdout 에 2 스트림 섞임(pgse 패턴과 동일).
+    - { container: web-stub,           dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVWebAudit",     marker: "StreamWebAudit" }
+    - { container: web-stub,           dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVArchiveAudit", marker: "StreamArchive" }
 
 # HTTPS Ingress (ingress-nginx + cert-manager 설치 후 enable). 기본 off(kind).
 ingress:

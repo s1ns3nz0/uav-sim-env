@@ -59,6 +59,8 @@ build_load uavsim/sar:local             "$REPO/sar-stub"
 build_load uavsim/counter-uas:local     "$REPO/counter-uas"
 # service-audit (Kubernetes Event 기반 파드 생애주기 관측)
 build_load uavsim/service-audit:local   "$REPO/service-audit"
+# web-stub (IT 계층 공격면 시뮬레이션 — S48~S55)
+build_load uavsim/web-stub:local        "$REPO/web-stub"
 
 echo "==> [5/5] Helm install (AKS 와 동일 차트 — values-kind.yaml 오버라이드)"
 # AKS = helm + ArgoCD GitOps. kind 도 같은 차트 단일 진실. 이전엔 standalone

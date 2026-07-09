@@ -1,4 +1,4 @@
-// Tertiary DCR — KUS-FS 확장(편대 + SATCOM + 카운터-UAS) 5개 스트림.
+// Tertiary DCR — KUS-FS 확장(편대 + SATCOM + 카운터-UAS + IT계층 웹감사) 7개 스트림.
 // primary(dcr.bicep, 10) / extras(dcr-extras.bicep, 9)가 10-logFiles/DCR 한계에
 // 가까워 신규 테이블은 이 세 번째 DCR로 분리한다. 동일 DCE + workspace 사용.
 // UAVGcsAccess_CL 은 pollack-ai/deploy/sentinel-tables 의 dcr-uav-soc 로 이관(소유권 SOC).
@@ -32,6 +32,12 @@ param fleetStateLogPath string = '/var/log/uav-sim-env/fleet-state.ndjson'
 @description('카운터-UAS RF 탐지·재밍 교전 NDJSON 경로 (counter-uas).')
 param counterUasLogPath string = '/var/log/uav-sim-env/counter-uas.ndjson'
 
+@description('IT 계층 웹 감사 NDJSON 경로 (web-stub, S48~S52).')
+param webAuditLogPath string = '/var/log/uav-sim-env/web.ndjson'
+
+@description('아카이브 추출 감사 NDJSON 경로 (web-stub, S53~S55).')
+param archiveAuditLogPath string = '/var/log/uav-sim-env/web-archive.ndjson'
+
 var dceName = '${namePrefix}-dce'
 var dcrName = '${namePrefix}-uav-dcr-ext2'
 
@@ -40,12 +46,16 @@ var sarStreamName = 'Custom-UAVSarPayload'
 var routerStatsStreamName = 'Custom-UAVRouterStats'
 var fleetStateStreamName = 'Custom-UAVFleetState'
 var counterUasStreamName = 'Custom-UAVCounterUas'
+var webAuditStreamName = 'Custom-UAVWebAudit'
+var archiveAuditStreamName = 'Custom-UAVArchiveAudit'
 
 var satcomTableName = 'UAVSatcomLink_CL'
 var sarTableName = 'UAVSarPayload_CL'
 var routerStatsTableName = 'UAVRouterStats_CL'
 var fleetStateTableName = 'UAVFleetState_CL'
 var counterUasTableName = 'UAVCounterUas_CL'
+var webAuditTableName = 'UAVWebAudit_CL'
+var archiveAuditTableName = 'UAVArchiveAudit_CL'
 
 resource law 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -127,6 +137,42 @@ var counterUasStreamColumns = [
   { name: 'ReasonCode', type: 'string' }
 ]
 
+var webAuditStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'EventType', type: 'string' }
+  { name: 'RequesterId', type: 'string' }
+  { name: 'TargetId', type: 'string' }
+  { name: 'IdorSuspected', type: 'boolean' }
+  { name: 'Filename', type: 'string' }
+  { name: 'ContentSnippet', type: 'string' }
+  { name: 'WebshellSignatureDetected', type: 'boolean' }
+  { name: 'MatchedPattern', type: 'string' }
+  { name: 'Binary', type: 'string' }
+  { name: 'Args', type: 'string' }
+  { name: 'GtfobinsMatch', type: 'boolean' }
+  { name: 'PrivilegeBefore', type: 'string' }
+  { name: 'PrivilegeAfter', type: 'string' }
+  { name: 'EscapeMethod', type: 'string' }
+  { name: 'TargetPath', type: 'string' }
+  { name: 'CronEntry', type: 'string' }
+  { name: 'InstalledBy', type: 'string' }
+  { name: 'StatusCode', type: 'int' }
+]
+
+var archiveAuditStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'EventType', type: 'string' }
+  { name: 'ArchiveName', type: 'string' }
+  { name: 'Mode', type: 'string' }
+  { name: 'EntryPath', type: 'string' }
+  { name: 'PathTraversalDetected', type: 'boolean' }
+  { name: 'AbsolutePathDetected', type: 'boolean' }
+  { name: 'SymlinkEscapeDetected', type: 'boolean' }
+  { name: 'ExtractedCount', type: 'int' }
+  { name: 'BlockedCount', type: 'int' }
+  { name: 'StatusCode', type: 'int' }
+]
+
 resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
   name: dcrName
   location: location
@@ -139,6 +185,8 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       '${routerStatsStreamName}': { columns: routerStatsStreamColumns }
       '${fleetStateStreamName}': { columns: fleetStateStreamColumns }
       '${counterUasStreamName}': { columns: counterUasStreamColumns }
+      '${webAuditStreamName}': { columns: webAuditStreamColumns }
+      '${archiveAuditStreamName}': { columns: archiveAuditStreamColumns }
     }
     dataSources: {
       logFiles: [
@@ -147,6 +195,8 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
         { name: 'uavRouterStatsFile', streams: [ routerStatsStreamName ], filePatterns: [ routerStatsLogPath ], format: 'json' }
         { name: 'uavFleetStateFile', streams: [ fleetStateStreamName ], filePatterns: [ fleetStateLogPath ], format: 'json' }
         { name: 'uavCounterUasFile', streams: [ counterUasStreamName ], filePatterns: [ counterUasLogPath ], format: 'json' }
+        { name: 'uavWebAuditFile', streams: [ webAuditStreamName ], filePatterns: [ webAuditLogPath ], format: 'json' }
+        { name: 'uavArchiveAuditFile', streams: [ archiveAuditStreamName ], filePatterns: [ archiveAuditLogPath ], format: 'json' }
       ]
     }
     destinations: {
@@ -160,6 +210,8 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       { streams: [ routerStatsStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${routerStatsTableName}' }
       { streams: [ fleetStateStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${fleetStateTableName}' }
       { streams: [ counterUasStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${counterUasTableName}' }
+      { streams: [ webAuditStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${webAuditTableName}' }
+      { streams: [ archiveAuditStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${archiveAuditTableName}' }
     ]
   }
 }
