@@ -243,6 +243,8 @@ var mpsStreamColumns = [
   { name: 'Comment', type: 'string' }
   { name: 'FailReason', type: 'string' }
   { name: 'StatusCode', type: 'int' }
+  { name: 'RequesterId', type: 'string' }
+  { name: 'Found', type: 'boolean' }
 ]
 
 var datalinkStreamColumns = [

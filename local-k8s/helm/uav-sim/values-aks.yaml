@@ -8,12 +8,12 @@ image:
 # AKS 에서 데이터패스 on (kind 는 off)
 datalinkLos:
   enabled: true
-  imageTag: v3                   # v3: router_stats_to_ndjson sidecar (UAVRouterStats_CL emit)
+  imageTag: v4                   # v4: UnexpectedEndpoint(T1557 릴레이 MITM 탐지, grilling 세션)
 telemetryTap:
   enabled: true
   nodePool: sitl                 # system 풀 maxPods=30 회피
   stdoutMode: true               # 7 NDJSON 전부 /dev/stdout → FB tail 가능
-  imageTag: v8                   # v8: heartbeat_gap_suspected(T0878 경보억제 대리신호, GapSec)
+  imageTag: v9                   # v9: FleetState S103/S105(pairwise거리+Sybil) + ground_truth_tap.py 동봉
   uavId: "MUAV-AKS"              # prefix 만 — 코드가 "-SYS001/002/003" 박음
 gcsQgc:       { enabled: true, imageTag: v2 }   # v2: nginx access log emitter (UAVGcsAccess_CL)
 fluentBit:    { enabled: true }   # AKS NDJSON → Sentinel 일원화
@@ -24,13 +24,24 @@ c4i: { nodePool: sitl, logPath: /dev/stdout, imageTag: v2 }   # v2: current_oper
 groundStubsNodePool: sitl
 groundStubsLogToStdout: true                    # 모든 ground 스텁 LOG_FILE_PATH=/dev/stdout
 groundStubsImageTags:
-  pgse-stub: v2   # v2: firmware_update_mode_entered(T0800 — Reason/Authorized)
+  pgse-stub: v3     # v3: 모뎀/SATCOM 펌웨어 검증(T0857, grilling 세션) — v2는 T0800
+  web-stub: v2      # v2: rootkit_install_attempt(T1014/T0851, S62)
+  auth-stub: v2     # v2: auth_policy_changed(T1556) + account_created(T0859)
+  mps-stub: v2      # v2: plan_read 조회 감사(T0845)
 
 # counter-uas 도 system 풀은 (a) maxPods 꽉 참 (b) fluentbit affinity 밖(sitl/satcom 만 커버)
 # → sitl 로 재배치해야 UAVCounterUas_CL 이 실제로 적재된다.
 counterUas: { nodePool: sitl }
 # service-audit 도 동일한 이유로 sitl 로 배치(신규 컴포넌트라 처음부터 올바른 풀 사용).
 serviceAudit: { nodePool: sitl, imageTag: v3 }  # v3: stdout 중복 기록 버그 수정(모든 이벤트 2배 집계되던 문제)
+
+# ground-truth-tap — 위와 동일한 이유(fluentbit affinity=sitl/satcom 만)로 처음부터 sitl.
+# telemetry-tap 과 같은 이미지 재사용이므로 imageTag 도 telemetryTap 과 맞춰 둔다.
+groundTruthTap:
+  enabled: true
+  nodePool: sitl
+  imageTag: v9
+  sitlTcpAddr: "tcp:av-mpd.air.svc.cluster.local:5760"
 
 # AKS 출처를 표에서 구별하기 위해 UAV_ID 를 다르게 (검증용)
 datalinkSatcom:

@@ -220,6 +220,14 @@ class CronInstallRequest(BaseModel):
     installed_by: str = Field("", examples=["www-data"])
 
 
+class RootkitInstallRequest(BaseModel):
+    method: Literal["kernel_module", "ld_preload", "syscall_hook"]
+    target_path: str = Field("", examples=["/lib/modules/rogue.ko"])
+    inhibits_alarms: bool = Field(
+        False, description="T0851 — rootkit also suppresses SOC/failsafe alarm reporting"
+    )
+
+
 @app.post("/cron/install", tags=["persistence"])
 def cron_install(req: CronInstallRequest) -> dict[str, Any]:
     """Log a cron-persistence install attempt. Never touches a real crontab."""
@@ -230,6 +238,27 @@ def cron_install(req: CronInstallRequest) -> dict[str, Any]:
         "StatusCode": 200,
     })
     return {"entry": req.entry, "logged": True}
+
+
+# ---- S62: rootkit 설치 / 경보 억제 ------------------------------------------
+
+@app.post("/host/rootkit-install", tags=["persistence"])
+def rootkit_install(req: RootkitInstallRequest) -> dict[str, Any]:
+    """Log a rootkit-install attempt. No real kernel module/hook is loaded.
+
+    T1014(Rootkit)/T0851(Rootkit — Inhibit Response) — `inhibits_alarms=true`
+    models the variant that also suppresses alarm/response reporting (the
+    ICS-side sibling technique), reusing `EscapeMethod`/`TargetPath` from the
+    container-escape schema rather than growing the table further.
+    """
+    _emit({
+        "EventType": "rootkit_install_attempt",
+        "EscapeMethod": req.method,
+        "TargetPath": req.target_path,
+        "AlarmsInhibited": req.inhibits_alarms,
+        "StatusCode": 200,
+    })
+    return {"method": req.method, "logged": True}
 
 
 # ---- S53~S55: 아카이브 경로순회(Zip Slip) / tar 심볼릭 링크 / 절대경로 -------

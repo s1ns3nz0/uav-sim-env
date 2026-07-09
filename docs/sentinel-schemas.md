@@ -230,7 +230,7 @@ UAVMissionEvent_CL
 |---|---|---|
 | TimeGenerated | datetime | 결정 시각 |
 | EventType | string | `preflight_check`(출격 전 검증), `firmware_query`(승인 펌웨어 조회), `launch_authorize`(발사 인가, 거부 포함) |
-| UAVId | string | 대상 차량 |
+| UAVId | string | 대상 차량. **T0857(모뎀/SATCOM 펌웨어, 2026-07-09 추가)**: `firmware_query`/`preflight_check`에서 값이 `GDT-MODEM-*`/`SATCOM-TERM-*` 형식이면 기체가 아니라 지상 데이터링크 모뎀 펌웨어 검증(`/armory/modem-firmware/*`, 별도 `MODEM_APPROVED` 레지스트리, 신규 컬럼 없이 기존 스키마 재사용) |
 | Operator | string | 절차를 호출한 운영자(정비/발사 담당) |
 | Serial | string | 기체 일련번호(하드웨어 식별) |
 | ImageHashSubmitted | string | 기체에 실제 탑재된 펌웨어 해시(`sha256:…`) |
@@ -283,7 +283,7 @@ UAVPgse_CL
 | 컬럼 | 타입 | 설명 (실제 UAV 데이터) |
 |---|---|---|
 | TimeGenerated | datetime | 이벤트 시각 |
-| EventType | string | 결재 단계 — `plan_created`(작성), `plan_approved`/`plan_approve_rejected`(승인/거부), `plan_released`/`plan_release_rejected`(출격 릴리즈/거부) |
+| EventType | string | 결재 단계 — `plan_created`(작성), `plan_approved`/`plan_approve_rejected`(승인/거부), `plan_released`/`plan_release_rejected`(출격 릴리즈/거부), `plan_read`(**T0845**, 조회, 2026-07-09 추가) |
 | PlanId | string | 임무계획 식별 ID |
 | UAVId | string | 임무 대상 차량 |
 | Planner | string | 임무를 작성한 계획자 |
@@ -297,17 +297,21 @@ UAVPgse_CL
 | Comment | string | 승인 코멘트 |
 | FailReason | string | 거부 사유 — `planner_equals_approver`(2인 통제 위반), `not_approved`(미승인 발사), `not_in_draft` |
 | StatusCode | int | 처리 HTTP 코드 |
+| **RequesterId** | string | `plan_read` 전용 — 조회 호출자 식별(익명이면 빈값) |
+| **Found** | boolean | `plan_read` 전용 — 조회한 PlanId가 실제 존재했는지 |
 
 ### 예시 값과 의미
 - `EventType="plan_created", Planner="lt.kim", Status="DRAFT", Roe="recon-only", PayloadConfig="EO_IR", WaypointCount=5` → 김중위가 EO/IR 정찰 전용 임무 초안을 작성(경유지 5개), 아직 DRAFT.
 - `EventType="plan_approved", Planner="lt.kim", Approver="capt.park", Status="APPROVED"` → 작성자(김중위)와 다른 박대위가 승인 = 2인 통제 충족.
 - `EventType="plan_released", ReleasedBy="capt.park", Status="RELEASED"` → 승인된 계획이 출격 릴리즈됨.
+- `EventType="plan_read", PlanId="xY9…", RequesterId="", Found=true` → **T0845** — 익명/비인가 호출자가 임무계획(웨이포인트·ROE·탑재구성)을 조회. `RequesterId==""` 대량 반복이면 정찰성 추출 정황.
 
 ### 시나리오 매핑
 
 - **2-person 위반** — `EventType == "plan_approve_rejected" and FailReason == "planner_equals_approver"`
 - **미승인 발사** — `EventType == "plan_release_rejected" and FailReason == "not_approved"`
 - **OSCAL 증거** — `EventType in ("plan_approved","plan_released")` 시간순
+- **T0845 임무계획 대량 추출** — `EventType == "plan_read"` 동일 RequesterId(또는 익명)로 5분 내 다수 PlanId 조회
 
 ### KQL 샘플
 
@@ -574,23 +578,29 @@ UAVCyberPosture_CL
 | 컬럼 | 타입 | 설명 (실제 데이터) |
 |---|---|---|
 | TimeGenerated | datetime | 인증 이벤트 시각 |
-| EventType | string | `login_success`/`login_failure`(로그인 성공/실패), `token_validated`/`token_validation_failed`(세션 검증), `logout`/`logout_unknown` |
-| Operator | string | 운영자 계정명 |
+| EventType | string | `login_success`/`login_failure`(로그인 성공/실패), `token_validated`/`token_validation_failed`(세션 검증), `logout`/`logout_unknown`, `auth_policy_changed`(**T1556**, 2026-07-09 추가), `account_created`(**T0859**, 2026-07-09 추가) |
+| Operator | string | 운영자 계정명 (정책변경/계정생성 이벤트에서는 실행 주체) |
 | ClientIp | string | 접속 출발지 IP — 세션 중 바뀌면 도용 의심 |
 | UserAgent | string | 접속 클라이언트(예: `qgc-desktop`) |
 | SessionId | string | 발급된 세션 토큰 |
 | FailReason | string | 실패 사유 — `invalid_credentials`/`wrong_password`/`unknown_session` |
 | StatusCode | int | 처리 코드 |
+| **TargetOperator** | string | `auth_policy_changed` 전용=변경된 정책 필드명, `account_created` 전용=생성된 계정명 |
+| **Detail** | string | `auth_policy_changed`="이전값->이후값", `account_created`="privileged"/"standard" |
 
 ### 예시 값과 의미
 - `EventType="login_success", Operator="capt.park", ClientIp="10.50.0.30", SessionId="sess-9f3a", UserAgent="qgc-desktop"` → 박대위가 GCS에서 정상 로그인, 세션 발급.
 - `EventType="login_failure", Operator="capt.park", FailReason="wrong_password"` → 비밀번호 오류로 로그인 실패.
 - `EventType="token_validated", SessionId="sess-9f3a", ClientIp="10.50.0.55"` → 같은 세션이 다른 IP에서 검증됨(로그인 때 IP와 다르면 세션 이동/도용 가능성).
+- `EventType="auth_policy_changed", Operator="admin", TargetOperator="mfa_required", Detail="true->false"` → **T1556** — MFA 요구를 끈 인증 정책 다운그레이드.
+- `EventType="account_created", Operator="admin", TargetOperator="svc-maint-temp", Detail="privileged"` → **T0859** — 정규 온보딩 절차 밖에서 생성된 특권 계정(백도어 후보).
 
 ### 시나리오 매핑
 
 - **brute force** — `EventType == "login_failure"` 단일 IP 1분 내 5회+
 - **세션 IP 변경** — 같은 SessionId가 다른 ClientIp에서 사용
+- **T1556 인증정책 변조** — `EventType == "auth_policy_changed" and TargetOperator == "mfa_required" and Detail endswith "false"`
+- **T0859 백도어 계정** — `EventType == "account_created"` 후 정상 온보딩(계획서·승인) 기록이 없는 경우
 
 ---
 
@@ -940,18 +950,56 @@ UAVSatcomLink_CL
 | MsgRx, MsgTx | long | 라우팅 메시지 수 |
 | MsgDropped | long | 드롭 |
 | CrcErrors | long | malformed/CRC 오류 (인젝션 정황) |
+| **UnexpectedEndpoint** | boolean | **T1557(텔레메트리 릴레이 MITM) 핵심**, 2026-07-09 추가(grilling 세션). `KNOWN_ENDPOINTS` 명단(`av_in*`/`gcs_out`/`tap_out`/`tcp_5790`) 밖의 이름이 통계 블록에 나타나면 `true` — 누군가 mavlink-router conf 에 프록시 엔드포인트를 끼워넣었다는 뜻 |
 
 **예시 값과 의미**
-- `EndpointName="gcs_out", MsgRx=0, MsgTx=18230, MsgDropped=0, CrcErrors=0` → GCS 방향으로 18,230개 메시지 송출, 드롭·오류 없음(정상 라우팅).
+- `EndpointName="gcs_out", MsgRx=0, MsgTx=18230, MsgDropped=0, CrcErrors=0, UnexpectedEndpoint=false` → GCS 방향으로 18,230개 메시지 송출, 드롭·오류 없음(정상 라우팅).
 - `CrcErrors>0` → 깨진/형식 불량 MAVLink 수신 = 평문 인젝션·손상 패킷 정황.
+- `EndpointName="rogue_relay", UnexpectedEndpoint=true` → **T1557** — 알려진 명단 밖의 엔드포인트가 라우터 conf에 등장, 릴레이 경로 조작 의심.
 
-### 20.5 `UAVFleetState_CL` (C순위 — 선택; 분석룰 우선)
-- 편대(2~4대) 동시 항로이탈·일괄 명령 등 횡적확산은 **기존 `UAVTelemetry_CL`/`UAVOperator_CL` 위 KQL 분석으로 우선 처리** 권장. 부하·재사용성이 문제될 때만 요약 테이블로 신설.
-- (신설 시 안) `WindowStart`, `FleetId`, `ActiveUAVCount`, `DivergingCount`, `CommonCommand`, `AnomalyScore`.
+### 20.5 `UAVFleetState_CL` (A순위 — S101/S102/S103/S105/S107 스웜, 2026-07-09 확장)
+- **출처**: `telemetry-tap`이 이미 갖고 있던 편대 모드(SystemId별 다중 차량 구분, `UAV_ID` prefix `MUAV-AKS...-SYS00N`)를 그대로 활용 — 별도 서비스 신설 없이 `FLEET_STATE_FILE_PATH` sink 하나 추가. `fried-pollack-ai` 재검토 결과, S101(리더 스푸핑)·S102(합의 포이즈닝)·S107(명령 리플레이/증폭)은 개별 메시지 하나로는 시그니처가 안 나오는 **집단행동(collective-behavior) 공격**이라 전용 이벤트 스트림 대신 여기서 윈도우 요약으로 잡는다.
+- `FLEET_STATE_INTERVAL_SEC`(기본 30초)마다: `GLOBAL_POSITION_INT`로 갱신되는 편대원 위치의 중심(centroid) 대비 `FLEET_DIVERGE_THRESHOLD_DEG`(기본 0.01°) 이상 벗어난 기체 수(`DivergingCount`), 윈도우 내 최다빈도 `COMMAND_LONG` 액션(`CommonCommand`)과 그 비율을 집계해 `AnomalyScore`(0~1)로 합성.
+- 3개 윈도우(≈90초) 이상 위치 갱신이 없는 기체는 `ActiveUAVCount`에서 자동 제외(이탈/다운 처리).
+- **2026-07-09 확장(grilling 세션, S103/S105)**: 편대원 쌍(pairwise)의 최소거리(`MinPairDistanceDeg`)와 `EXPECTED_FLEET_MEMBERS`(env, 콤마구분 명단) 대조로 미지 UAVId 존재 여부(`UnknownUavIdDetected`)를 추가 계산. 명단을 안 주면(기본) Sybil 검사는 생략.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| WindowStart | datetime | 집계 윈도우 시작 시각 |
+| FleetId | string | 편대 식별(`FLEET_ID` env, 기본 `MUAV-FLT-1`) |
+| ActiveUAVCount | int | 윈도우 내 위치 갱신이 있었던 활성 기체 수 |
+| DivergingCount | int | 편대 중심에서 임계 이상 벗어난 기체 수 |
+| CommonCommand | string | 윈도우 내 최다빈도 COMMAND_LONG 액션명 |
+| AnomalyScore | real | `max(이탈비율, 명령리플레이비율/3, 충돌비율, Sybil여부)` 0~1 |
+| **MinPairDistanceDeg** | real | **S103(상대항법 스푸핑→충돌유도) 핵심** — 편대원 쌍 중 최소 거리. `FLEET_COLLISION_THRESHOLD_DEG`(기본 0.0005°) 아래로 붙으면 상대위치 스푸핑 의심 |
+| **CollisionRiskPair** | string | 최소거리를 만든 두 UAVId(`"MUAV-001\|MUAV-002"` 형식) |
+| **UnknownUavIdDetected** | boolean | **S105(Sybil 가짜노드) 핵심** — `EXPECTED_FLEET_MEMBERS` 명단 밖의 UAVId가 활성으로 보이면 `true` |
 
 **예시 값과 의미**
 - `FleetId="MUAV-FLT-1", ActiveUAVCount=4, DivergingCount=0, AnomalyScore=0.05` → 편대 4대 전원 활성, 항로 이탈기 0대 = 정상 편대 비행.
-- `ActiveUAVCount=4, DivergingCount=3, CommonCommand="mode_change"` → 4대 중 3대가 동시에 같은 모드변경 명령을 받고 항로 이탈 = 편대 단위 이상행위.
+- `ActiveUAVCount=4, DivergingCount=3, CommonCommand="mode_change", AnomalyScore=0.75` → 4대 중 3대가 동시에 같은 모드변경 명령을 받고 항로 이탈 = **S107 명령 리플레이 + S104 대형분산** 정황.
+- `DivergingCount=0`인데 `CommonCommand`가 짧은 시간창에 반복적으로 동일 → 이탈 없이 명령만 증폭 = **S101 리더 스푸핑**(팔로워가 rogue 리더 명령을 순순히 따르는 중이라 대형은 아직 안 깨짐) 후보.
+- `MinPairDistanceDeg=0.0002, CollisionRiskPair="MUAV-001|MUAV-002", AnomalyScore=1.0` → **S103** — 두 기체가 정상 상대항법으로는 불가능할 거리까지 붙음, 공중충돌 위험.
+- `ActiveUAVCount=5, UnknownUavIdDetected=true` (명단은 4대) → **S105** — 알려진 편대원이 아닌 5번째 노드가 섞여 들어옴, Sybil 위장 의심.
+
+### 시나리오 매핑
+- **S101 리더 스푸핑** — `DivergingCount == 0` 인데 `CommonCommand` 반복 + 출처가 알려진 리더 UAVId가 아닌 정황(§ `UAVOperator_CL.SourceSystemId` 교차 확인)
+- **S102 합의 포이즈닝 / S104 대형 분산** — `DivergingCount` 급증
+- **S103 상대항법 스푸핑→충돌유도** — `MinPairDistanceDeg < FLEET_COLLISION_THRESHOLD_DEG`
+- **S105 Sybil 가짜노드** — `UnknownUavIdDetected == true`
+- **S107 명령 리플레이/증폭** — `AnomalyScore` 산정에 쓰인 명령리플레이비율(`CommonCommand` 빈도/`ActiveUAVCount`) 급등
+
+### KQL 샘플
+```kql
+// 편대 이상 윈도우 — 이탈 과반, AnomalyScore 임계 초과, 또는 충돌위험/Sybil
+UAVFleetState_CL
+| where TimeGenerated > ago(30m)
+| where DivergingCount >= ActiveUAVCount / 2 or AnomalyScore > 0.5
+       or isnotempty(CollisionRiskPair) or UnknownUavIdDetected == true
+| project TimeGenerated, FleetId, ActiveUAVCount, DivergingCount, CommonCommand,
+         AnomalyScore, MinPairDistanceDeg, CollisionRiskPair, UnknownUavIdDetected
+```
 
 ### 20.6 `UAVCounterUas_CL` (A순위 — S30/S31/S62 RF 시작단계 사각지대 정면 대응)
 - **출처**: `counter-uas`(카운터-UAS 시뮬, 송신 없음) — 방어 자산 주변 RF emitter 수동 탐지 + 근접시 자동 재밍(J/S) 교전. `EventType`으로 두 레코드 종류가 한 스트림에 섞임: `rf_detection`(탐지) / `jam_engagement`(교전).
@@ -991,7 +1039,7 @@ UAVSatcomLink_CL
 | 컬럼 | 타입 | 설명 |
 |---|---|---|
 | TimeGenerated | datetime | |
-| EventType | string | `operator_profile_access`(S48)/`imagery_upload`(S49)/`host_exec_attempt`(S50)/`container_escape_attempt`(S51)/`cron_entry_installed`(S52) |
+| EventType | string | `operator_profile_access`(S48)/`imagery_upload`(S49)/`host_exec_attempt`(S50)/`container_escape_attempt`(S51)/`cron_entry_installed`(S52)/`rootkit_install_attempt`(S62, **T1014/T0851**, 2026-07-09 추가) |
 | RequesterId, TargetId | string | S48 — 세션 소유자 vs 요청 대상 리소스 ID |
 | IdorSuspected | boolean | S48 핵심 — `RequesterId != TargetId`면 `true` |
 | Filename, ContentSnippet | string | S49 — 업로드 파일명/내용(앞 200자) |
@@ -1002,6 +1050,7 @@ UAVSatcomLink_CL
 | EscapeMethod, TargetPath | string | S51 — `docker_sock_mount`/`privileged_flag`/`hostpath_mount`/`cap_sys_admin` |
 | CronEntry, InstalledBy | string | S52 — 설치 시도한 cron 항목/설치 주체 |
 | StatusCode | int | 처리 코드 |
+| **AlarmsInhibited** | boolean | `rootkit_install_attempt` 전용 — **T0851 핵심**. `true`면 루트킷이 지속성뿐 아니라 경보/응답 보고 자체를 억제하는 변종(ICS Inhibit Response 계열) |
 
 **예시 값과 의미**
 - `EventType="operator_profile_access", RequesterId="operator-01", TargetId="operator-02", IdorSuspected=true` → 킬체인 C18 예시(`GET /weapon/operator-02`)와 동일 패턴 — 다른 운영자 리소스에 세션 불일치 접근.
@@ -1009,6 +1058,7 @@ UAVSatcomLink_CL
 - `EventType="host_exec_attempt", Binary="find", GtfobinsMatch=true, PrivilegeAfter="root"` → C16 SUID/GTFOBins 권한상승.
 - `EventType="container_escape_attempt", EscapeMethod="docker_sock_mount", TargetPath="/var/run/docker.sock"` → C15/C16 컨테이너 escape 시도.
 - `EventType="cron_entry_installed", CronEntry="* * * * * root /opt/rogue"` → C16 cron 지속성 설치.
+- `EventType="rootkit_install_attempt", EscapeMethod="ld_preload", TargetPath="/etc/ld.so.preload", AlarmsInhibited=true` → **T1014+T0851** — LD_PRELOAD 후킹 루트킷 설치 시도, 경보 억제 변종.
 
 ### 시나리오 매핑
 - **S48 IDOR** — `EventType == "operator_profile_access" and IdorSuspected == true`
@@ -1016,7 +1066,8 @@ UAVSatcomLink_CL
 - **S50 SUID/GTFOBins** — `EventType == "host_exec_attempt" and GtfobinsMatch == true`
 - **S51 컨테이너 escape** — `EventType == "container_escape_attempt"`
 - **S52 cron 하이재킹** — `EventType == "cron_entry_installed"`
-- **C16 완전은밀 체인** — 위 5개 EventType 이 짧은 시간창에 순서대로(웹셸→SUID→escape→cron) 발생하면 순수 IT 권한상승 체인
+- **S62 루트킷/경보억제** — `EventType == "rootkit_install_attempt"` (`AlarmsInhibited==true`면 우선순위 상향 — 다른 탐지의 은폐 목적일 수 있음)
+- **C16 완전은밀 체인** — 위 EventType 들이 짧은 시간창에 순서대로(웹셸→SUID→escape→cron/rootkit) 발생하면 순수 IT 권한상승 체인
 
 ### 20.8 `UAVArchiveAudit_CL` (B순위 — 공급망 아카이브 전달 벡터)
 - **출처**: `web-stub`(`web-archive.ndjson`) — S53(Zip Slip)·S54(tar 심볼릭 링크 탈출)·S55(절대경로 추출). `mode="vulnerable"`은 실제 zip 추출 시 경로 검증을 생략해 진짜 Zip Slip을 재현하지만, 매 요청마다 새로 만드는 임시 디렉터리(`tempfile.TemporaryDirectory()`)에서만 벌어지고 요청이 끝나면 통째로 삭제된다 — 실제 피해 반경은 컨테이너 내 임시저장소로 격리.
@@ -1044,11 +1095,209 @@ UAVSatcomLink_CL
 - **S55 절대경로 추출** — `EventType == "archive_entry_extracted" and AbsolutePathDetected == true`
 - **C14/C17 공급망 아카이브 전달** — 이 테이블에서 탐지 후 하류 `UAVPgse_CL`(펌웨어 변조)·`UAVWebAudit_CL`(웹셸) 시간 인접 상관
 
+### 20.9 `UAVFileAudit_CL` (A순위 — pollack-ai 소유권 지정 갭, 2026-07-09 추가·2026-07-09 프로듀서 구현)
+- **출처**: `file-audit-stub`(신규, `file-audit.ndjson`). **grilling 세션 결정**: 진짜 Falco/eBPF(특권 DaemonSet, AKS 노드 커널 지원 필요, 이 repo에 없던 종류의 인프라)는 리스크/작업량 대비 이번 스코프에 안 맞다고 판단 — 이 repo의 다른 IT계층 스텁(web-stub 등)과 동일하게 **호출자가 파일/실행 이벤트를 명시적으로 신고**하는 스텁으로 대체. 나중에 진짜 Falco로 교체 가능하도록 스키마는 그대로 유지.
+- **발견 경위**: `fried-pollack-ai`(UAV ATT&CK 매트릭스·S1~S126 시나리오·C1~C33 킬체인 캠페인) 검토 + 자매 레포 `pollack-ai/deploy/sentinel-tables`(4개 테이블 스키마 초안: GcsAccess·RouterStats·Imagery·FileAudit) 교차 대조. `GcsAccess_CL`(cross-repo `dcr-uav-soc`)·`RouterStats_CL`·`Imagery_CL`은 이미 라이브. `FileAudit_CL`만 `pollack-ai`가 소유권을 "uav-sim-env(테이블+DCR+소스 emit)"로 명시했는데도 이 repo에 전혀 없던 유일한 실질 갭.
+- **의의**: `UAVServiceAudit_CL`(K8s Event 기반, `IsDestructiveAction`/`LogBearingTargetSuspected`로 파괴적 행위를 간접 추정)과 달리 **파일 시스템 레벨 1차 근거**를 제공 — S47(anti-forensics 로그삭제)·S51/S56(컨테이너 escape 후속 파일쓰기)·S57(cron persistence 파일 설치)·T0809/T1485(데이터 파괴)를 실제 syscall/파일 경로로 확정.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| ContainerName | string | 이벤트 발생 컨테이너 |
+| Pid | int | 프로세스 ID |
+| ProcessName | string | 실행 바이너리명 |
+| Operation | string | 파일 연산 (`read`/`write`/`delete`/`create`/`chmod`/`exec`) — marker 컬럼(fluent-bit rewrite_tag) |
+| FilePath | string | 대상 파일 경로(`exec`는 실행 인자를 담음) |
+| BytesAccessed | long | 접근 바이트 수 |
+| User | string | 실행 사용자 |
+| Syscall | string | 원본 syscall 이름(`read`/`write`/`unlink`/`open`/`chmod`/`execve`) |
+| **LogBearingTargetSuspected** | boolean | `UAVServiceAudit_CL`과 동일 휴리스틱을 파일 계층에 적용 — 대상 경로가 로그/증거 저장소(`/var/log/uav-sim-env`, `ndjson`, `audit`)이고 연산이 write/delete면 `true`. **S47 핵심** |
+| **PersistenceTargetSuspected** | boolean | 대상 경로가 지속성 실행 지점(`/etc/cron.d`, `/etc/ld.so.preload`, `startup.d`)이면 `true`. **S57 인접 핵심** |
+
+**예시 값과 의미**
+- `Operation="delete", FilePath="/var/log/uav-sim-env/service-audit.ndjson", LogBearingTargetSuspected=true` → **S47** — 증거(로그) 그 자체를 삭제, anti-forensics 의심.
+- `Operation="write", FilePath="/etc/cron.d/rogue", PersistenceTargetSuspected=true` → cron 지속성 설치 시도(web-stub `cron_entry_installed`와 상관 가능).
+- `Operation="exec", ProcessName="find", FilePath=". -exec /bin/sh -p ; -quit"` → S50 GTFOBins 실행 시도의 파일계층 기록(web-stub `host_exec_attempt`와 동일 이벤트의 프로세스 레벨 근거).
+
+### 20.10 `UAVRcLink_CL` (A순위 — WiFi/RC 물리링크 완전 사각지대, 2026-07-09 신설)
+- **출처**: `rc-link-stub`(신규, `rc-link.ndjson`) — S25~S31. 이 repo의 MAVLink(LOS/BLOS) 링크·SATCOM 링크와 별개로, 소형 정찰 무인기가 실제로 갖는 **WiFi 텔레메트리 AP**(컴패니언 컴퓨터 접속)와 **2.4GHz RC 제어링크**(안전조종사)는 어느 서비스도 다루지 않던 완전 사각지대였다.
+- **안전 설계**: web-stub과 동일 원칙 — 실제 802.11/RC 프로토콜 트래픽은 전혀 송신하지 않고, 각 엔드포인트가 기법의 탐지 가능한 시그니처만 명시적 제어 호출로 시뮬레이션한다.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| EventType | string | `wifi_associate`(S26/S28)/`rc_bind`(S29)/`rc_override`(S30)/`protocol_negotiate`(S31) |
+| DeviceId | string | 접속 기기/수신기 식별 |
+| UavId | string | 대상 차량 (rc_bind/rc_override/protocol_negotiate 전용) |
+| Ssid | string | WiFi AP SSID (wifi_associate 전용) |
+| BssidMismatch | boolean | **S26(evil twin) 핵심** — 알려진 SSID인데 등록된 BSSID와 다르면 `true` |
+| DefaultCredentialUsed | boolean | **S28 핵심** — 기체별 고유 자격증명이 아닌 공장 기본값(`admin`/`12345678` 등) 사용 |
+| BindCodeReused | boolean | **S29 핵심** — 다른 기체용으로 발급된 바인딩 코드가 재사용됨(탈취 정황) |
+| Channel, ChannelValue | int | rc_override 전용 — 주입된 RC 채널 번호/값 |
+| OverrideAuthorized | boolean | **S30(T0855) 핵심** — `false`면 등록된 송신기(TX) 세션 밖에서 채널값이 직접 주입됨 |
+| ProtocolRequested, ProtocolNegotiated | string | protocol_negotiate 전용 — 요청/실제 협상된 링크 프로토콜 |
+| DowngradeDetected | boolean | **S31(T1600) 핵심** — 협상된 프로토콜이 요청보다 약한 암호화/모드로 다운그레이드 |
+| StatusCode | int | 처리 코드 |
+
+**예시 값과 의미**
+- `EventType="wifi_associate", Ssid="UAS-TELEM-AP", BssidMismatch=true` → 정상 SSID를 사칭한 다른 BSSID(evil twin AP)에 접속 시도.
+- `EventType="wifi_associate", DefaultCredentialUsed=true` → 공장 기본 비밀번호로 텔레메트리 AP 접속(자격증명 강화 안 됨).
+- `EventType="rc_bind", UavId="MPD-001", BindCodeReused=true` → MUAV-001용으로 발급된 바인딩 코드가 MPD-001 수신기에 재사용됨 = 탈취 정황.
+- `EventType="rc_override", Channel=3, ChannelValue=1900, OverrideAuthorized=false` → 등록된 송신기 세션 밖에서 채널3(보통 스로틀)에 직접 값 주입 = 비인가 RC 명령.
+- `EventType="protocol_negotiate", ProtocolRequested="fhss-aes128", ProtocolNegotiated="fixed-freq-plain", DowngradeDetected=true` → 암호화 주파수도약에서 평문 고정주파수로 강제 다운그레이드.
+
+### 시나리오 매핑
+- **S26 WiFi Evil Twin** — `EventType == "wifi_associate" and BssidMismatch == true`
+- **S28 WiFi 기본 자격증명** — `EventType == "wifi_associate" and DefaultCredentialUsed == true`
+- **S29 RC 바인딩 자격 탈취** — `EventType == "rc_bind" and BindCodeReused == true`
+- **S30 RC 채널 오버라이드(T0855)** — `EventType == "rc_override" and OverrideAuthorized == false`
+- **S31 RC 프로토콜 다운그레이드(T1600)** — `EventType == "protocol_negotiate" and DowngradeDetected == true`
+- **S27 WiFi 재밍** — 이 테이블이 아니라 `UAVCounterUas_CL`(RF 계층, §20.6)에서 커버
+
+### KQL 샘플
+```kql
+// 비인가 RC 채널 오버라이드 — 등록 TX 세션 밖 명령
+UAVRcLink_CL
+| where TimeGenerated > ago(15m)
+| where EventType == "rc_override" and OverrideAuthorized == false
+| project TimeGenerated, DeviceId, UavId, Channel, ChannelValue
+```
+
+### 20.11 `UAVSupplyChain_CL` (B순위 — 아티팩트 서명·mTLS 위조, 2026-07-09 신설)
+- **출처**: `supply-chain-stub`(신규, `supply-chain.ndjson`) — S70(mTLS 인증서 위조, T1649)·S73(아티팩트 서명 우회, T1553). `UAVPgse_CL`이 이미 다루는 **펌웨어 이미지** 공급망 무결성(해시·SBOM)과 별개로, **빌드 아티팩트 서명 검증**과 **서비스간 mTLS 인증서 발급/검증**은 어느 서비스도 다루지 않던 갭이었다(`fried-pollack-ai` extended 카탈로그 S70/S73, 대응 로그 없음).
+- **안전 설계**: 서명/인증서는 실제 cosign/x509가 아닌 메모리 내 토이 구조체 — 실제 배포 가능한 아티팩트를 신뢰하거나 실제 서비스간 mTLS를 성립시키지 않는다.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| EventType | string | `artifact_signature_verify`(S73)/`cert_issued`/`cert_validated`(S70) |
+| Subject | string | 검증 대상 아티팩트명 또는 인증서가 주장하는 주체(CN) |
+| Issuer | string | 서명 키 식별자 또는 인증서 발급기관 |
+| SignatureValid | boolean | `artifact_signature_verify` 전용 — 서명자가 신뢰 목록에 있는지 |
+| **BypassSuspected** | boolean | **S73(T1553) 핵심** — `SignatureValid=false`인데도 파이프라인이 강제 배포(`force_accept`)했는지 |
+| CertSerial | string | mTLS 인증서 일련번호 |
+| **CertForgedSuspected** | boolean | **S70(T1649) 핵심** — 제시된 일련번호가 발급 레지스트리에 없거나, 있어도 주체/발급기관이 발급 당시와 다르면 `true` |
+| StatusCode | int | 처리 코드 |
+
+**예시 값과 의미**
+- `EventType="artifact_signature_verify", Subject="uav-sim/web-stub:1.4.0", SignatureValid=true` → 신뢰된 키로 서명된 정상 아티팩트.
+- `EventType="artifact_signature_verify", Subject="uav-sim/web-stub:1.4.1-rc", SignatureValid=false, BypassSuspected=true` → **T1553** — 서명 검증 실패했는데도 파이프라인이 강제 배포.
+- `EventType="cert_issued", Subject="telemetry-tap.soc.svc.cluster.local", CertSerial="a1b2..."` → 정상 mTLS 클라이언트 인증서 발급.
+- `EventType="cert_validated", Subject="telemetry-tap.soc.svc.cluster.local", CertSerial="ffff0000", CertForgedSuspected=true` → **T1649** — 발급 레지스트리에 없는 일련번호(위조/자체서명) 또는 발급 당시 주체와 불일치하는 인증서 제시.
+
+### 시나리오 매핑
+- **S73 아티팩트 서명 우회** — `EventType == "artifact_signature_verify" and BypassSuspected == true`
+- **S70 mTLS 인증서 위조** — `EventType == "cert_validated" and CertForgedSuspected == true`
+
+---
+
+## 21. Grilling 세션 보강분 (2026-07-09, `dah-data-uav-dcr-ext3`)
+
+> fried-pollack-ai 116기법 전수 재검토(§20 배포 이후에도 "탐지가능" 필터 없이 재확인) 결과 발견된
+> 잔여 갭 4개 테이블. **VM 폐기 이후 신설**이라 `dcr-ext3.bicep`은 `dataSources.logFiles`(AMA/VM
+> 전용) 없이 AKS fluent-bit(Logs Ingestion API push) 경로만 지원 — `kind:'Linux'`를 지정하면
+> Azure가 `dataSources` non-empty를 강제해 배포가 거부되므로(실제로 1차 배포 시도에서
+> `InvalidProperty: DataSources cannot be null or empty` 확인) `kind` 자체를 생략했다.
+> **2026-07-09 `dah-data-rg`/`dah-data-law`에 라이브 배포 확인** — `dah-data-uav-dcr-ext3`
+> (`dcrImmutableId=dcr-11863da6b9c240428286d5ad7d61a1e6`), `values.yaml`의 `fluentBit.streams`
+> 4줄에도 반영 완료. `tables.bicep`/`dcr.bicep`/`dcr-extras.bicep`/`dcr-ext2.bicep`(이번 세션의
+> 스키마 확장분 포함)도 같은 날 재배포 확인.
+
+### 21.1 `UAVCompanion_CL` — GCS 애플리케이션 + 컴패니언/ROS (S41~S47, S50)
+- **출처**: `companion-stub`(신규, `companion.ndjson`). `gcs-qgc`는 REST API 없는 GUI 앱(noVNC)이라 애플리케이션 레벨 후킹 지점이 없고, ROS 마스터/컴패니언 컴퓨터 자체가 이 repo에 없어 완전 사각지대였다.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| EventType | string | `mission_upload`(S41)/`plugin_inject`(S42)/`update_check`(S43)/`config_tamper`(S44)/`ros_master_access`(S45)/`ros_topic_publish`(S46)/`mavros_command`(S47)/`ntp_check`(S50) |
+| Target | string | 이벤트 대상(파일명/플러그인명/컴포넌트명/ROS caller_id) |
+| ContentSnippet | string | 업로드/코드/파라미터 스니펫 |
+| PathTraversalDetected | boolean | **S41 핵심** — 미션파일 필드에 `..` 경로순회 |
+| InjectionSignatureDetected | boolean | **S42 핵심** — QML 코드에 `Component.onCompleted`/`eval(` 등 |
+| MitmSuspected | boolean | **S43/S50 핵심** — 신뢰 안 된 appcast 서명자, 또는 NTP 서버/오프셋 이상 |
+| ConfigField, ValueBefore, ValueAfter, ChangedBy | string | **S44** — GCS 런타임 설정 변경(예: `MAVLINK_COMM` 재지정) |
+| Authorized | boolean | **S45/S46/S47 핵심** — `false`면 비인가 ROS 마스터 접근/토픽 발행/MAVROS 명령 |
+| Topic | string | S46 — 발행 대상 ROS 토픽 |
+| Command | string | S47 — MAVROS setpoint/명령 토픽 |
+| NtpServer, OffsetReportedSec | string, real | S50 — 보고된 NTP 서버/오프셋 |
+| StatusCode | int | 처리 코드 |
+
+**시나리오 매핑**: S41 `PathTraversalDetected==true` · S42 `InjectionSignatureDetected==true` · S43/S50 `MitmSuspected==true` · S45~47 `Authorized==false`.
+**참고**: T0857(모뎀/SATCOM 펌웨어)은 `pgse-stub`(§4 확장, `/armory/modem-firmware/*`)로, T1557(텔레메트리 릴레이 MITM)은 `datalink-los`(§20.4 `UnexpectedEndpoint`)로 커버 — 이 테이블에는 없음(grilling 세션 결정: 기존 서비스와 도메인이 더 가까움).
+
+### 21.2 `UAVDevOps_CL` — 빌드/배포 파이프라인 + DDS/MQTT 미들웨어 (S67~S76)
+- **출처**: `devops-stub`(신규, `devops.ndjson`). **스코프 노트**: 이 8개 기법은 "무인기 운용 환경"이 아니라 "이 repo(또는 실제 UAS 프로그램)를 빌드·배포하는 SW 인프라"를 공격 대상으로 삼는 메타 계층이라, 다른 UAV 도메인 서비스와 분리해 단일 스텁으로 묶었다(grilling 세션 결정).
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| EventType | string | `registry_image_pull`(S67)/`cicd_pipeline_trigger`(S68)/`vault_secret_access`(S69)/`dependency_resolve`(S71)/`iac_apply`(S72)/`build_provenance_verify`(S74)/`dds_discovery_flood`(S75)/`mqtt_publish`(S76) |
+| Target | string | 이미지/파이프라인/시크릿경로/패키지명/리소스/아티팩트/토픽 |
+| Actor | string | 트리거/접근/적용/빌드 주체 |
+| DigestMismatch | boolean | **S67 핵심** |
+| UnauthorizedTrigger | boolean | **S68 핵심** |
+| SecretExfilSuspected | boolean | **S69 핵심** — 허용된 서비스계정(`ci-pipeline-sa`/`deploy-controller-sa`) 밖의 접근자 |
+| DependencyConfusionSuspected | boolean | **S71 핵심** — 내부전용 패키지가 공개 레지스트리에서 해석됨 |
+| UnplannedApply | boolean | **S72 핵심** — 리뷰된 plan 없이 IaC 적용 |
+| ProvenanceMismatch | boolean | **S74 핵심** |
+| ParticipantCount, FloodSuspected | int, boolean | **S75 핵심** — DDS/ROS2 discovery 참가자 수 급증(기본 임계 200) |
+| Topic, UnauthorizedPublish | string, boolean | **S76 핵심** — MQTT 버스 비인가 발행 |
+| StatusCode | int | 처리 코드 |
+
+### 21.3 `UAVFleetInfra_CL` — 함대API + RTSP + 스웜조정 자진신고 (S81, S83, S106, S108)
+- **출처**: `fleet-infra-stub`(신규, `fleet-infra.ndjson`). S81(함대API)·S83(RTSP)은 진짜 신규 표면(신규 서비스 필요). **S106/S108은 자진신고 전용** — 이 repo엔 진짜 flocking 제어루프도 진짜 기체간 메시망도 없음(검증 완료: 구현 이전 `flocking`/`mesh` 문자열이 코드베이스 어디에도 없었음). 호출자가 "이런 변조/분단이 있었다"고 신고하면 기록만 하고, 실제 탐지가치는 `UAVFleetState_CL`의 이상치와의 하류 상관에서 나온다.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| EventType | string | `fleet_api_access`(S81)/`rtsp_hijack`(S83)/`flocking_tamper`(S106)/`mesh_link_status`(S108) |
+| FleetId | string | 대상 편대 |
+| RequesterId, TargetId | string | S81 — IDOR 패턴(web-stub `/weapon/{id}`와 동일) |
+| IdorSuspected | boolean | **S81 핵심** |
+| StreamId, SessionId, ClientIp | string | S83 — 영상스트림/RTSP 세션 |
+| HijackSuspected | boolean | **S83 핵심** — 스트림의 첫 DESCRIBE 세션과 다른 session_id가 이어받으면 `true` |
+| Rule, ValueBefore, ValueAfter, ChangedBy | string/real/string | S106 — flocking 규칙(분리/정렬/응집) 변조 신고 |
+| LinkA, LinkB, LinkStatus, Reason | string | S108 — 편대원 쌍 사이 메시 링크 상태 신고 |
+| StatusCode | int | 처리 코드 |
+
+### 21.4 `UAVGroundTruth_CL` — S121 방어(중계경로 우회 진실값)
+- **출처**: `ground-truth-tap`(신규, `telemetry-tap`과 동일 이미지, command override로 `ground_truth_tap.py` 실행). `datalink-los` 중계를 거치지 않고 SITL(`av-mpd` TCP 5760, mavlink-router가 클라이언트로 붙는 바로 그 포트)에 **직결**해 HEARTBEAT의 `CustomMode`만 관측 — 중계경로 어딘가(예: T1557 릴레이 MITM)에서 값이 위조돼도 이 소스는 영향받지 않는다.
+
+| 컬럼 | 타입 | 설명 |
+|---|---|---|
+| TimeGenerated | datetime | |
+| UAVId | string | 대상 차량 |
+| GroundTruthCustomMode | int | SITL에서 직접 관측한 ArduPilot 비행모드(중계경로 거치지 않음) |
+| Source | string | 항상 `direct-sitl-tap` |
+
+**시나리오 매핑 — S121 비행모드 위조 보고**: `UAVTelemetry_CL.CustomMode`(중계경로, SOC가 원래 보던 값)와 `UAVGroundTruth_CL.GroundTruthCustomMode`(SITL 직결)를 UAVId+시간으로 join 했을 때 값이 다르면 = 중계경로(datalink-los) 어딘가에서 모드값이 조작됨. 설명 가능한 지연(수 초 이내 값 수렴)이 아니라 **지속적 불일치**일 때만 발화.
+
+```kql
+// S121 — 중계경로 값과 SITL 직결 진실값 불일치
+UAVTelemetry_CL
+| where TimeGenerated > ago(15m) and MsgType == "HEARTBEAT"
+| project TimeGenerated, UAVId, RelayCustomMode = CustomMode
+| join kind=inner (
+    UAVGroundTruth_CL
+    | where TimeGenerated > ago(15m)
+    | project GtTime = TimeGenerated, UAVId, GroundTruthCustomMode
+) on UAVId
+| where abs(datetime_diff('second', TimeGenerated, GtTime)) < 5
+| where RelayCustomMode != GroundTruthCustomMode
+```
+
 ### 보류 (표준 솔루션으로 충분 / 비용 대비 낮음)
 - ArduPilot dataflash(.bin)·콘솔 로그 — 대용량, MAVLink로 대부분 커버.
 - OS/호스트(Syslog·AzureActivity·네트워크 egress) — `vm-monitoring`/`azure-activity` 표준 수집.
 - 영상/SAR 원본 바이너리 — 메타(`UAVImagery_CL`/`UAVSarPayload_CL`)로 충분.
 - C4I 공군→육군 핸드오프 — 신규 테이블 대신 `UAVC4I_CL`에 EventType 추가.
+- ~~S41~S50 GCS/ROS~~ → **해소(2026-07-09, grilling 세션)**. `companion-stub`(§22) 신설.
+- ~~S67~S77 공급망/DevSecOps~~, ~~S81/S83 함대API·RTSP~~ → **해소(2026-07-09)**. `devops-stub`(§23) + `fleet-infra-stub`(§24) 신설. S77(geofence)은 조사 결과 이미 `UAVConfigAudit_CL`이 커버 중이었음(FENCE_* 파라미터도 PARAM_VALUE 변화로 필터 없이 수집).
+- ~~S103/S105 스웜(충돌유도·Sybil)~~ → **해소(2026-07-09)**. `telemetry-tap` FleetState에 pairwise 최소거리·명단대조 로직 추가(§20.5).
+- **S106/S108 스웜(flocking변조·메시분단)** — 조사 결과 이 repo엔 **진짜 flocking 제어루프도 진짜 메시망도 없음**(검증 완료, 독립 SITL만 존재). 그래서 `fleet-infra-stub`(§24)에 자진신고 엔드포인트만 신설 — 실제 관측이 아니라 "이런 변조가 있었다"는 신고를 기록만 함(다른 IT계층 스텁과 동일 패턴). 진짜 편대비행 기능 자체를 구현하는 건 훨씬 큰 별개 프로젝트라 이번엔 여기까지.
+- **S98~S99 수동 정찰** — 공격자측 로컬 행위(자기 화면 녹화, 오프와이어 스니핑)라 표적측 흔적이 원천적으로 없음. **재검토(2026-07-09, grilling 세션) 결론: 아키텍처를 어떻게 바꿔도 로그 불가능 — 구조적 한계로 최종 확정, 추가 시도 안 함.** (검토했던 대안: 캔어리/디셉션 기법은 별도 프로젝트급이라 기각, MAVSec 서명 강제화는 탐지가 아니라 완화라 별개 트랙.)
+- **S111~S126 운용모드(임무·조종·모드·기종별)** — 대부분 `UAVTelemetry_CL`/`UAVOperator_CL`/`UAVMissionEvent_CL`/`UAVFailsafe_CL`의 기존 컬럼(Roll/Pitch/Yaw·Command·CustomMode·ClimbRate 등)으로 이미 원자료가 잡히고 있어 **신규 로그가 아니라 KQL 탐지룰 문제**로 판단, 보류.
+- ~~S121 비행모드 위조 보고~~ → **해소(2026-07-09, grilling 세션)**. 텔레메트리 채널 자체가 변조 대상이라 그 채널 안에서는 원리적으로 로그 불가능했지만, `ground-truth-tap`(§25)이 `datalink-los` 중계를 우회해 SITL(av-mpd) TCP 5760에 직결 → `UAVTelemetry_CL.CustomMode`(중계경로 값)와 `UAVGroundTruth_CL.GroundTruthCustomMode`(직결 값)를 join 비교하면 중계경로 위·변조를 확정 탐지 가능.
 
 ---
 
@@ -1072,13 +1321,17 @@ UAVSatcomLink_CL
   ├── UAVCyberPosture_CL  (CT-3/2/1)
   ├── UAVThreatIntel_CL   (TI 피드)
   ├── UAVWeapon_CL        (무장 안전·락·발사)
-  └── UAVOpAudit_CL       (운영자 인증)
+  ├── UAVOpAudit_CL       (운영자 인증 + 인증정책변조/백도어계정)
+  └── UAVFleetState_CL    (편대 위치발산·명령리플레이 요약 — S101/102/107)
 
 [인프라 층]
   ├── UAVServiceAudit_CL  (Kubernetes Event)
   ├── UAVDatalink_CL      (datalink 네트워크 카운터)
   ├── UAVResourceMetrics_CL (모든 컨테이너 리소스)
-  └── UAVDatalinkConn_CL  (TCP 연결 스냅샷)
+  ├── UAVDatalinkConn_CL  (TCP 연결 스냅샷)
+  ├── UAVFileAudit_CL     (파일/exec 감사 — 스키마만, 프로듀서 미구현)
+  ├── UAVRcLink_CL        (WiFi AP + RC 제어링크 — S25~S31)
+  └── UAVSupplyChain_CL   (아티팩트 서명 + mTLS 인증서 — S70/S73)
 ```
 
 ---

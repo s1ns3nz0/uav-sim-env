@@ -1,0 +1,43 @@
+{{- with .Values.groundTruthTap }}
+{{- if .enabled }}
+# S121(비행모드 위조보고) 방어 — datalink-los 중계를 거치지 않고 SITL(av-mpd) TCP
+# 5760에 직결해 CustomMode 를 관측한다. telemetry-tap 과 같은 이미지, command만
+# ground_truth_tap.py 로 override(빌드 중복 없음).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ground-truth-tap
+  namespace: soc
+  labels: { app: ground-truth-tap }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: ground-truth-tap }
+  template:
+    metadata:
+      labels: { app: ground-truth-tap }
+    spec:
+      nodeSelector: { pool: {{ default "system" .nodePool }} }
+      containers:
+        - name: ground-truth-tap
+          image: {{ $.Values.image.registry }}/{{ default "telemetry-tap" .image }}:{{ default $.Values.image.tag .imageTag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          command: ["python", "-u", "ground_truth_tap.py"]
+          env:
+            - { name: UAV_ID, value: {{ .uavId | default "MPD-001" | quote }} }
+            - { name: SITL_TCP_ADDR, value: {{ .sitlTcpAddr | default "tcp:av-mpd.air.svc.cluster.local:5760" | quote }} }
+            {{- if $.Values.fluentBit.enabled }}
+            - { name: GROUND_TRUTH_FILE_PATH, value: /dev/stdout }
+            {{- else }}
+            - { name: GROUND_TRUTH_FILE_PATH, value: /var/log/uav-sim-env/ground-truth.ndjson }
+            {{- end }}
+          volumeMounts:
+            - { name: logs, mountPath: /var/log/uav-sim-env }
+          resources:
+            requests: { cpu: "25m", memory: 48Mi }
+            limits:   { cpu: "100m", memory: 96Mi }
+      volumes:
+        - name: logs
+          emptyDir: {}
+{{- end }}
+{{- end }}

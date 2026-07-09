@@ -45,6 +45,7 @@ spec:
             - { name: CONFIG_AUDIT_FILE_PATH, value: /dev/stdout }
             - { name: IMAGERY_FILE_PATH,      value: /dev/stdout }
             - { name: MAVSEC_FILE_PATH,       value: /dev/stdout }
+            - { name: FLEET_STATE_FILE_PATH,  value: /dev/stdout }
             {{- else }}
             - { name: LOG_FILE_PATH,          value: /var/log/uav-sim-env/telemetry.ndjson }
             - { name: OPERATOR_FILE_PATH,     value: /var/log/uav-sim-env/operator.ndjson }
@@ -53,8 +54,14 @@ spec:
             - { name: CONFIG_AUDIT_FILE_PATH, value: /var/log/uav-sim-env/config-audit.ndjson }
             - { name: IMAGERY_FILE_PATH,      value: /var/log/uav-sim-env/imagery.ndjson }
             - { name: MAVSEC_FILE_PATH,       value: /var/log/uav-sim-env/mavsec.ndjson }
+            - { name: FLEET_STATE_FILE_PATH,  value: /var/log/uav-sim-env/fleet-state.ndjson }
             {{- end }}
             - { name: MAVSEC_INTERVAL_SEC,  value: "30" }
+            - { name: FLEET_ID,              value: {{ .fleetId | default "MUAV-FLT-1" | quote }} }
+            {{- if .expectedFleetMembers }}
+            # S105(Sybil) — 알려진 편대 명단. 비우면(기본) 검사 생략.
+            - { name: EXPECTED_FLEET_MEMBERS, value: {{ .expectedFleetMembers | quote }} }
+            {{- end }}
           ports:
             - { name: tap, containerPort: 14552, protocol: UDP }
           volumeMounts:

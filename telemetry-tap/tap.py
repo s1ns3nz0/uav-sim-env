@@ -53,6 +53,22 @@ IMAGERY_FILE_PATH: str = os.environ.get("IMAGERY_FILE_PATH", "")
 MAVSEC_FILE_PATH: str = os.environ.get("MAVSEC_FILE_PATH", "")
 MAVSEC_INTERVAL_SEC: int = int(os.environ.get("MAVSEC_INTERVAL_SEC", "30"))
 
+# Fleet-state sink — swarm-level summary every FLEET_STATE_INTERVAL_SEC.
+# Only meaningful in fleet mode (UAV_ID starts with "MUAV-AKS", multiple
+# SystemIds multiplexed through this one process — see uav_id derivation in
+# _record_for). S101(leader-spoof)/S102(consensus poison)/S107(command
+# replay) surface here as divergence/anomaly, not as their own event stream.
+FLEET_STATE_FILE_PATH: str = os.environ.get("FLEET_STATE_FILE_PATH", "")
+FLEET_STATE_INTERVAL_SEC: int = int(os.environ.get("FLEET_STATE_INTERVAL_SEC", "30"))
+FLEET_ID: str = os.environ.get("FLEET_ID", "MUAV-FLT-1")
+FLEET_DIVERGE_THRESHOLD_DEG: float = float(os.environ.get("FLEET_DIVERGE_THRESHOLD_DEG", "0.01"))
+# S103(상대항법 스푸핑→충돌유도) — 편대원 쌍(pairwise) 최소거리가 이 아래로 붙으면 위험.
+FLEET_COLLISION_THRESHOLD_DEG: float = float(os.environ.get("FLEET_COLLISION_THRESHOLD_DEG", "0.0005"))
+# S105(Sybil 가짜노드) — 알려진 편대 명단(콤마구분). 비우면 검사 생략(명단 모름=플래그 불가).
+EXPECTED_FLEET_MEMBERS: frozenset[str] = frozenset(
+    m.strip() for m in os.environ.get("EXPECTED_FLEET_MEMBERS", "").split(",") if m.strip()
+)
+
 # MAVLink message types that represent operator-initiated control actions.
 OPERATOR_MSG_TYPES: frozenset[str] = frozenset({
     "COMMAND_LONG",
@@ -125,6 +141,7 @@ _failsafe_file_handle = None
 _config_audit_file_handle = None
 _imagery_file_handle = None
 _mavsec_file_handle = None
+_fleet_state_file_handle = None
 
 # Stateful trackers used to derive named mission events from the message stream.
 _last_mode: int | None = None
@@ -136,6 +153,11 @@ _param_state: dict[str, float] = {}
 _mavsec_signed = 0
 _mavsec_unsigned = 0
 _mavsec_last_emit_ts: float = 0.0
+
+# Per-UAVId fleet state, keyed by uav_id. Reset (command tally) each window.
+_fleet_positions: dict[str, dict[str, float]] = {}
+_fleet_command_tally: dict[str, int] = {}
+_fleet_state_last_emit_ts: float = 0.0
 
 # Failsafe-flavoured ArduPilot modes (custom_mode int). Mirrors mode_change
 # numbers we are most interested in (ArduPlane + Quadplane).
@@ -374,6 +396,99 @@ def _maybe_emit_mavsec(msg: Any, record: dict[str, Any]) -> None:
     _mavsec_last_emit_ts = now
 
 
+def _fleet_track(record: dict[str, Any]) -> None:
+    """Update per-UAVId fleet state from a forwarded record. Cheap, always runs."""
+    uav_id = record.get("UAVId")
+    if not isinstance(uav_id, str):
+        return
+    msg_type = record.get("MsgType")
+    if msg_type == "GLOBAL_POSITION_INT":
+        lat, lon = record.get("Lat"), record.get("Lon")
+        if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+            _fleet_positions[uav_id] = {"Lat": lat, "Lon": lon, "ts": time.time()}
+    elif msg_type == "COMMAND_LONG":
+        action = _derive_action(record)
+        _fleet_command_tally[action] = _fleet_command_tally.get(action, 0) + 1
+
+
+def _maybe_emit_fleet_state(now_epoch: float) -> None:
+    """Periodically summarise fleet-wide state — S101/S102/S107 surface here
+    as divergence/anomaly since none of them get their own event stream
+    (leader-spoof/consensus-poison/command-replay are collective-behaviour
+    attacks, not single-message signatures)."""
+    global _fleet_state_last_emit_ts
+    if _fleet_state_file_handle is None:
+        return
+    if now_epoch - _fleet_state_last_emit_ts < FLEET_STATE_INTERVAL_SEC:
+        return
+    _fleet_state_last_emit_ts = now_epoch
+
+    # Drop stale members (no position update within 3 windows — vehicle went dark).
+    stale_cutoff = now_epoch - 3 * FLEET_STATE_INTERVAL_SEC
+    active = {uid: p for uid, p in _fleet_positions.items() if p["ts"] >= stale_cutoff}
+    active_count = len(active)
+
+    diverging = 0
+    min_pair_dist: float | None = None
+    collision_risk_pair = ""
+    if active_count >= 2:
+        centroid_lat = sum(p["Lat"] for p in active.values()) / active_count
+        centroid_lon = sum(p["Lon"] for p in active.values()) / active_count
+        for p in active.values():
+            dist = ((p["Lat"] - centroid_lat) ** 2 + (p["Lon"] - centroid_lon) ** 2) ** 0.5
+            if dist > FLEET_DIVERGE_THRESHOLD_DEG:
+                diverging += 1
+
+        # S103(상대위치 스푸핑→충돌유도) — 편대원 쌍의 최소거리. 진짜 상대항법이면
+        # 절대 이 임계 아래로 안 붙으므로, 붙었다면 둘 중 하나(또는 둘 다)의
+        # 상대위치가 스푸핑됐다는 뜻.
+        items = list(active.items())
+        for i in range(len(items)):
+            for j in range(i + 1, len(items)):
+                (uid_a, pa), (uid_b, pb) = items[i], items[j]
+                pair_dist = ((pa["Lat"] - pb["Lat"]) ** 2 + (pa["Lon"] - pb["Lon"]) ** 2) ** 0.5
+                if min_pair_dist is None or pair_dist < min_pair_dist:
+                    min_pair_dist = pair_dist
+                    collision_risk_pair = f"{uid_a}|{uid_b}"
+
+    # S105(Sybil 가짜노드) — 알려진 편대 명단 밖의 UAVId가 활성으로 보이면 가짜 노드 의심.
+    unknown_uav_detected = bool(EXPECTED_FLEET_MEMBERS) and any(
+        uid not in EXPECTED_FLEET_MEMBERS for uid in active
+    )
+
+    common_command = max(_fleet_command_tally, key=_fleet_command_tally.get) if _fleet_command_tally else ""
+    # S107(command replay/amplification) — same command hitting most/all of the
+    # fleet in one window is itself the anomaly signature, independent of divergence.
+    replay_ratio = (_fleet_command_tally.get(common_command, 0) / active_count) if active_count else 0.0
+    diverge_ratio = (diverging / active_count) if active_count else 0.0
+    collision_ratio = 1.0 if (
+        min_pair_dist is not None and min_pair_dist < FLEET_COLLISION_THRESHOLD_DEG
+    ) else 0.0
+    anomaly_score = round(min(1.0, max(
+        diverge_ratio, min(1.0, replay_ratio / 3), collision_ratio,
+        1.0 if unknown_uav_detected else 0.0,
+    )), 2)
+
+    payload = {
+        "TimeGenerated": _now_iso(),
+        "WindowStart": datetime.fromtimestamp(
+            now_epoch - FLEET_STATE_INTERVAL_SEC, tz=timezone.utc
+        ).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+        "FleetId": FLEET_ID,
+        "ActiveUAVCount": active_count,
+        "DivergingCount": diverging,
+        "CommonCommand": common_command,
+        "AnomalyScore": anomaly_score,
+        "MinPairDistanceDeg": min_pair_dist,
+        "CollisionRiskPair": collision_risk_pair,
+        "UnknownUavIdDetected": unknown_uav_detected,
+        "StreamFleetState": "fleet-state",
+    }
+    _fleet_state_file_handle.write(json.dumps(payload, separators=(",", ":"), default=str) + "\n")
+    _fleet_state_file_handle.flush()
+    _fleet_command_tally.clear()
+
+
 def _emit(record: dict[str, Any]) -> None:
     """Serialize a record as a single-line JSON document on stdout (and file sinks)."""
     record["StreamTelemetry"] = "telemetry"
@@ -387,6 +502,7 @@ def _emit(record: dict[str, Any]) -> None:
     _maybe_emit_failsafe(record)
     _maybe_emit_config_audit(record)
     _maybe_emit_imagery(record)
+    _fleet_track(record)
     if _operator_file_handle is not None and record.get("MsgType") in OPERATOR_MSG_TYPES:
         op_record = {
             "TimeGenerated": record.get("TimeGenerated"),
@@ -588,6 +704,7 @@ def main() -> None:
     """Run the UDP subscriber loop and emit NDJSON to stdout."""
     global _log_file_handle, _operator_file_handle, _mission_file_handle
     global _failsafe_file_handle, _config_audit_file_handle, _imagery_file_handle, _mavsec_file_handle
+    global _fleet_state_file_handle
     if LOG_FILE_PATH:
         os.makedirs(os.path.dirname(LOG_FILE_PATH) or ".", exist_ok=True)
         _log_file_handle = open(LOG_FILE_PATH, "a", encoding="utf-8")
@@ -616,6 +733,10 @@ def main() -> None:
         os.makedirs(os.path.dirname(MAVSEC_FILE_PATH) or ".", exist_ok=True)
         _mavsec_file_handle = open(MAVSEC_FILE_PATH, "a", encoding="utf-8")
         _log(f"mavsec sink active: {MAVSEC_FILE_PATH}")
+    if FLEET_STATE_FILE_PATH:
+        os.makedirs(os.path.dirname(FLEET_STATE_FILE_PATH) or ".", exist_ok=True)
+        _fleet_state_file_handle = open(FLEET_STATE_FILE_PATH, "a", encoding="utf-8")
+        _log(f"fleet-state sink active: {FLEET_STATE_FILE_PATH} (fleet={FLEET_ID})")
 
     conn_str = f"udpin:{LISTEN_HOST}:{LISTEN_PORT}"
     _log(f"binding {conn_str}, UAVId={UAV_ID}")
@@ -642,6 +763,7 @@ def main() -> None:
 
         _emit(record)
         _maybe_emit_mavsec(msg, record)
+        _maybe_emit_fleet_state(time.time())
         msg_count += 1
 
         # Heartbeat log every ~500 records so operators see liveness on stderr.

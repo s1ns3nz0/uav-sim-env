@@ -88,6 +88,19 @@ groundStubs:
   # UAVArchiveAudit_CL(아카이브 추출, 별도 마커) 2 스트림이 같은 stdout 에 섞임.
   - { name: web-stub,            image: web-stub,       port: 8900, logFile: web.ndjson,
       archiveLogFile: web-archive.ndjson }
+  # rc-link-stub — WiFi 텔레메트리 AP + RC 제어링크 공격면(S25~S31). 이 repo의
+  # MAVLink/SATCOM 링크와 별도인 단거리 물리링크 2종을 커버.
+  - { name: rc-link-stub,        image: rc-link-stub,   port: 8800, logFile: rc-link.ndjson }
+  # supply-chain-stub — 아티팩트 서명우회(T1553)·mTLS 인증서 위조(T1649).
+  - { name: supply-chain-stub,   image: supply-chain,   port: 9000, logFile: supply-chain.ndjson }
+  # file-audit-stub — UAVFileAudit_CL 프로듀서(Falco/eBPF 대신 자진신고 스텁, grilling 세션 결정).
+  - { name: file-audit-stub,     image: file-audit,     port: 9100, logFile: file-audit.ndjson }
+  # companion-stub — GCS 애플리케이션 + 컴패니언/ROS 공격면(S41~S47/S50).
+  - { name: companion-stub,      image: companion,      port: 9200, logFile: companion.ndjson }
+  # devops-stub — 빌드/배포 파이프라인 + DDS/MQTT 미들웨어(S67~S76).
+  - { name: devops-stub,         image: devops,         port: 9300, logFile: devops.ndjson }
+  # fleet-infra-stub — 함대API+RTSP+스웜조정 자진신고(S81/S83/S106/S108).
+  - { name: fleet-infra-stub,    image: fleet-infra,    port: 9400, logFile: fleet-infra.ndjson }
 
 # pgse 의 승인 펌웨어 DB (ConfigMap 내용)
 approvedFirmware: |
@@ -116,6 +129,15 @@ telemetryTap:
   image: telemetry-tap
   nodePool: system
   uavId: MUAV-001
+
+# soc — ground-truth-tap (S121 방어, datalink-los 중계를 우회해 SITL 직결로
+# CustomMode 진실값 관측). telemetry-tap 과 같은 이미지 재사용.
+groundTruthTap:
+  enabled: false
+  image: telemetry-tap
+  nodePool: system
+  uavId: MPD-001
+  sitlTcpAddr: "tcp:av-mpd.air.svc.cluster.local:5760"
 
 # ground — gcs-qgc (QGroundControl noVNC). 도메인이 붙는 GCS UI.
 gcsQgc:
@@ -160,6 +182,9 @@ fluentBit:
     - { container: telemetry-tap,      dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVConfigAudit",  marker: "StreamConfigAudit" }
     - { container: telemetry-tap,      dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVImagery",      marker: "StreamImagery" }
     - { container: telemetry-tap,      dcrId: "dcr-3fcc15a7fb0d4c4ba69e96c90ffedaf5", stream: "UAVMavsec",       marker: "StreamMavsec" }
+    # 편대 상태 요약(ext2 DCR) — S101/S102/S107 리더스푸핑/합의포이즈닝/명령리플레이가
+    # 개별 메시지 시그니처가 아닌 fleet 단위 divergence/anomaly 로 여기서 드러남.
+    - { container: telemetry-tap,      dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVFleetState",   marker: "StreamFleetState" }
     # sar-stub (ext2 DCR). marker FrameId 는 NDJSON 만 보유.
     - { container: sar-stub,           dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVSarPayload",   marker: "FrameId" }
     # datalink-los (ext2 DCR) — mavlink-router stats sidecar NDJSON. marker EndpointName.
@@ -175,6 +200,17 @@ fluentBit:
     # web-stub (ext2 DCR) — IT 계층 공격면(S48~S55). 같은 stdout 에 2 스트림 섞임(pgse 패턴과 동일).
     - { container: web-stub,           dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVWebAudit",     marker: "StreamWebAudit" }
     - { container: web-stub,           dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVArchiveAudit", marker: "StreamArchive" }
+    # rc-link-stub (ext2 DCR) — WiFi AP + RC 제어링크 공격면(S25~S31). marker EventType.
+    - { container: rc-link-stub,       dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVRcLink",       marker: "EventType" }
+    # supply-chain-stub (ext2 DCR) — 아티팩트 서명우회 + mTLS 위조(S70/S73). marker EventType.
+    - { container: supply-chain-stub,  dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVSupplyChain",  marker: "EventType" }
+    # file-audit-stub (ext2 DCR, UAVFileAudit_CL 기존 소유 DCR) — marker Operation.
+    - { container: file-audit-stub,    dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVFileAudit",    marker: "Operation" }
+    # ── dcr-ext3 (grilling 세션 신규, 4 스트림) — dah-data-uav-dcr-ext3, 2026-07-09 배포 확인 ──
+    - { container: companion-stub,     dcrId: "dcr-11863da6b9c240428286d5ad7d61a1e6", stream: "UAVCompanion",   marker: "EventType" }
+    - { container: devops-stub,        dcrId: "dcr-11863da6b9c240428286d5ad7d61a1e6", stream: "UAVDevOps",      marker: "EventType" }
+    - { container: fleet-infra-stub,   dcrId: "dcr-11863da6b9c240428286d5ad7d61a1e6", stream: "UAVFleetInfra",  marker: "EventType" }
+    - { container: ground-truth-tap,   dcrId: "dcr-11863da6b9c240428286d5ad7d61a1e6", stream: "UAVGroundTruth", marker: "GroundTruthCustomMode" }
 
 # HTTPS Ingress (ingress-nginx + cert-manager 설치 후 enable). 기본 off(kind).
 ingress:

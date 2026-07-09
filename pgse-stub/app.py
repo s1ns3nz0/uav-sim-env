@@ -28,6 +28,13 @@ from pydantic import BaseModel, Field
 
 
 APPROVED_DB: Path = Path(os.environ.get("APPROVED_DB", "/data/approved_firmware.json"))
+# 모뎀/SATCOM 터미널 승인 펌웨어 해시 — 기체(APPROVED_DB)와 별개 레지스트리.
+# T0857(지상 데이터링크 하드웨어 펌웨어) — grilling 세션 결정: 신규 서비스 대신
+# 기체 펌웨어와 동일한 검증 패턴을 datalink-los/datalink-satcom 모뎀에 재사용.
+MODEM_APPROVED: dict[str, str] = {
+    "GDT-MODEM-01": "sha256:" + "11" * 32,
+    "SATCOM-TERM-01": "sha256:" + "22" * 32,
+}
 TOKEN_TTL_SEC: int = int(os.environ.get("TOKEN_TTL_SEC", "300"))
 FORBIDDEN_SBOM_PREFIXES: tuple[str, ...] = ("unsigned/", "untrusted/")
 LOG_FILE_PATH: str = os.environ.get("LOG_FILE_PATH", "")
@@ -243,6 +250,53 @@ def enter_firmware_update_mode(req: FirmwareUpdateModeRequest) -> dict[str, Any]
         "StatusCode": 200,
     })
     return {"uav_id": req.uav_id, "status": "update_mode_entered", "authorized": req.authorized}
+
+
+@app.get("/armory/modem-firmware/{modem_id}", tags=["armory"])
+def get_approved_modem_firmware(modem_id: str) -> dict[str, str]:
+    """Return the approved firmware hash for a ground datalink modem/SATCOM terminal.
+
+    T0857(Persistence — 지상 데이터링크 하드웨어 펌웨어). 기체 펌웨어(`/armory/
+    firmware/{uav_id}`)와 동일 패턴을 재사용 — 신규 컬럼 없이 UAVId 필드에
+    모뎀 ID를 담는다(UAVId 값이 `*-MODEM-*`/`*-TERM-*`이면 모뎀 레지스트리).
+    """
+    expected = MODEM_APPROVED.get(modem_id)
+    _emit_event({
+        "EventType": "firmware_query",
+        "UAVId": modem_id,
+        "Found": expected is not None,
+        "ImageHashExpected": expected or "",
+        "StatusCode": 200 if expected else 404,
+    })
+    if expected is None:
+        raise HTTPException(404, f"No approved firmware registered for modem {modem_id}")
+    return {"modem_id": modem_id, "expected_hash": expected}
+
+
+class ModemFirmwareVerifyRequest(BaseModel):
+    modem_id: str = Field(..., examples=["GDT-MODEM-01"])
+    image_hash: str = Field(..., examples=["sha256:0000...0001"])
+    operator: str = Field(..., examples=["sgt.kim"])
+
+
+@app.post("/armory/modem-firmware/verify", tags=["armory"])
+def verify_modem_firmware(req: ModemFirmwareVerifyRequest) -> dict[str, Any]:
+    """Verify a modem/SATCOM terminal's installed firmware against the approved registry."""
+    expected = MODEM_APPROVED.get(req.modem_id)
+    if expected is None:
+        raise HTTPException(404, f"Unknown modem {req.modem_id}")
+    image_match = expected == req.image_hash
+    _emit_event({
+        "EventType": "preflight_check",
+        "UAVId": req.modem_id,
+        "Operator": req.operator,
+        "ImageHashSubmitted": req.image_hash,
+        "ImageHashExpected": expected,
+        "HashMatch": image_match,
+        "Passed": image_match,
+        "StatusCode": 200,
+    })
+    return {"modem_id": req.modem_id, "hash_match": image_match}
 
 
 @app.post("/preflight/check", response_model=PreflightResult, tags=["preflight"])

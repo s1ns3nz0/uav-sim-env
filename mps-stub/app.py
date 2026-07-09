@@ -137,8 +137,22 @@ def create_plan(req: PlanCreateRequest) -> PlanRecord:
 
 
 @app.get("/plans/{plan_id}", response_model=PlanRecord, tags=["plans"])
-def get_plan(plan_id: str) -> PlanRecord:
+def get_plan(plan_id: str, requester: str = "") -> PlanRecord:
+    """Read a mission plan (waypoints, ROE, payload config).
+
+    T0845(Program/Param Upload — 임무계획 추출) — 종전엔 create/approve/release만
+    감사됐고 조회(read)는 무기록이었다. `requester`(호출자 식별, 없으면 익명) +
+    조회 성공 여부를 남겨 비인가·대량 조회를 탐지 가능하게 한다.
+    """
     record = _plans.get(plan_id)
+    _emit({
+        "EventType": "plan_read",
+        "PlanId": plan_id,
+        "UAVId": record["uav_id"] if record else "",
+        "RequesterId": requester,
+        "Found": record is not None,
+        "StatusCode": 200 if record else 404,
+    })
     if record is None:
         raise HTTPException(404, f"Plan {plan_id} not found")
     return PlanRecord(**record)

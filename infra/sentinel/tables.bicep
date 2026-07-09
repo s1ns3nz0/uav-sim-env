@@ -303,6 +303,9 @@ resource uavMissionPlan 'Microsoft.OperationalInsights/workspaces/tables@2023-09
         { name: 'Comment', type: 'string' }
         { name: 'FailReason', type: 'string' }
         { name: 'StatusCode', type: 'int' }
+        // T0845(Program/Param Upload — 임무계획 추출) — plan_read 전용.
+        { name: 'RequesterId', type: 'string' }
+        { name: 'Found', type: 'boolean' }
       ]
     }
   }
@@ -480,6 +483,10 @@ resource uavOpAudit 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01'
         { name: 'SessionId', type: 'string' }
         { name: 'FailReason', type: 'string' }
         { name: 'StatusCode', type: 'int' }
+        // T1556(Modify Auth Process)/T0859(백도어 계정) — auth_policy_changed/
+        // account_created 전용. TargetOperator=대상 필드명 또는 생성된 계정명.
+        { name: 'TargetOperator', type: 'string' }
+        { name: 'Detail', type: 'string' }
       ]
     }
   }
@@ -726,6 +733,8 @@ resource uavRouterStats 'Microsoft.OperationalInsights/workspaces/tables@2023-09
         { name: 'MsgTx', type: 'long' }
         { name: 'MsgDropped', type: 'long' }
         { name: 'CrcErrors', type: 'long' }
+        // T1557(텔레메트리 릴레이 MITM) — 알려진 엔드포인트 명단 밖의 이름이면 true.
+        { name: 'UnexpectedEndpoint', type: 'boolean' }
       ]
     }
   }
@@ -749,6 +758,10 @@ resource uavFleetState 'Microsoft.OperationalInsights/workspaces/tables@2023-09-
         { name: 'DivergingCount', type: 'int' }
         { name: 'CommonCommand', type: 'string' }
         { name: 'AnomalyScore', type: 'real' }
+        // S103(충돌유도)/S105(Sybil) — grilling 세션 결정, 실 다중차량 데이터 기반.
+        { name: 'MinPairDistanceDeg', type: 'real' }
+        { name: 'CollisionRiskPair', type: 'string' }
+        { name: 'UnknownUavIdDetected', type: 'boolean' }
       ]
     }
   }
@@ -822,6 +835,8 @@ resource uavWebAudit 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01
         { name: 'CronEntry', type: 'string' }
         { name: 'InstalledBy', type: 'string' }
         { name: 'StatusCode', type: 'int' }
+        // T0851(Rootkit — Inhibit Response) — rootkit_install_attempt 전용.
+        { name: 'AlarmsInhibited', type: 'boolean' }
       ]
     }
   }
@@ -850,6 +865,214 @@ resource uavArchiveAudit 'Microsoft.OperationalInsights/workspaces/tables@2023-0
         { name: 'ExtractedCount', type: 'int' }
         { name: 'BlockedCount', type: 'int' }
         { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
+// 호스트/컨테이너 파일·프로세스 실행 감사 — eBPF/Falco 소스(pollack-ai 설계, 소유권
+// uav-sim-env: 테이블+DCR+소스 emit). S47 anti-forensics(로그삭제)·S51/S56 컨테이너
+// escape 후속·S57 cron persistence·T0809/T1485 데이터파괴의 파일계층 1차 근거.
+// NOTE: 스키마+DCR 스트림만 선등록(UAVFleetState_CL과 동일 패턴) — Falco/eBPF
+// 프로듀서는 아직 이 repo에 미구현. 프로듀서 배선 전까지는 미적재 상태.
+resource uavFileAudit 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVFileAudit_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 30
+    totalRetentionInDays: 90
+    schema: {
+      name: 'UAVFileAudit_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'ContainerName', type: 'string' }
+        { name: 'Pid', type: 'int' }
+        { name: 'ProcessName', type: 'string' }
+        { name: 'Operation', type: 'string' }
+        { name: 'FilePath', type: 'string' }
+        { name: 'BytesAccessed', type: 'long' }
+        { name: 'User', type: 'string' }
+        { name: 'Syscall', type: 'string' }
+        // S47 anti-forensics 재사용(UAVServiceAudit_CL과 동일 휴리스틱, 파일 계층).
+        { name: 'LogBearingTargetSuspected', type: 'boolean' }
+        { name: 'PersistenceTargetSuspected', type: 'boolean' }
+      ]
+    }
+  }
+}
+
+// WiFi 텔레메트리 AP + RC 제어링크 공격면(S25~S31) — rc-link-stub rc-link.ndjson.
+resource uavRcLink 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVRcLink_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 30
+    totalRetentionInDays: 90
+    schema: {
+      name: 'UAVRcLink_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'DeviceId', type: 'string' }
+        { name: 'UavId', type: 'string' }
+        { name: 'Ssid', type: 'string' }
+        { name: 'BssidMismatch', type: 'boolean' }
+        { name: 'DefaultCredentialUsed', type: 'boolean' }
+        { name: 'BindCodeReused', type: 'boolean' }
+        { name: 'Channel', type: 'int' }
+        { name: 'ChannelValue', type: 'int' }
+        { name: 'OverrideAuthorized', type: 'boolean' }
+        { name: 'ProtocolRequested', type: 'string' }
+        { name: 'ProtocolNegotiated', type: 'string' }
+        { name: 'DowngradeDetected', type: 'boolean' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
+// 아티팩트 서명 우회(T1553, S73) + mTLS 인증서 위조(T1649, S70) —
+// supply-chain-stub supply-chain.ndjson.
+resource uavSupplyChain 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVSupplyChain_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 180
+    totalRetentionInDays: 365
+    schema: {
+      name: 'UAVSupplyChain_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'Subject', type: 'string' }
+        { name: 'Issuer', type: 'string' }
+        { name: 'SignatureValid', type: 'boolean' }
+        { name: 'BypassSuspected', type: 'boolean' }
+        { name: 'CertSerial', type: 'string' }
+        { name: 'CertForgedSuspected', type: 'boolean' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
+// GCS 애플리케이션 + 컴패니언/ROS 공격면(S41~S47/S50) — companion-stub companion.ndjson.
+resource uavCompanion 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVCompanion_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVCompanion_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'Target', type: 'string' }
+        { name: 'ContentSnippet', type: 'string' }
+        { name: 'PathTraversalDetected', type: 'boolean' }
+        { name: 'InjectionSignatureDetected', type: 'boolean' }
+        { name: 'MitmSuspected', type: 'boolean' }
+        { name: 'ConfigField', type: 'string' }
+        { name: 'ValueBefore', type: 'string' }
+        { name: 'ValueAfter', type: 'string' }
+        { name: 'ChangedBy', type: 'string' }
+        { name: 'Authorized', type: 'boolean' }
+        { name: 'Topic', type: 'string' }
+        { name: 'Command', type: 'string' }
+        { name: 'NtpServer', type: 'string' }
+        { name: 'OffsetReportedSec', type: 'real' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
+// 빌드/배포 파이프라인 + DDS/MQTT 미들웨어 공격면(S67~S76) — devops-stub devops.ndjson.
+resource uavDevOps 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVDevOps_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVDevOps_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'Target', type: 'string' }
+        { name: 'Actor', type: 'string' }
+        { name: 'DigestMismatch', type: 'boolean' }
+        { name: 'UnauthorizedTrigger', type: 'boolean' }
+        { name: 'SecretExfilSuspected', type: 'boolean' }
+        { name: 'DependencyConfusionSuspected', type: 'boolean' }
+        { name: 'UnplannedApply', type: 'boolean' }
+        { name: 'ProvenanceMismatch', type: 'boolean' }
+        { name: 'ParticipantCount', type: 'int' }
+        { name: 'FloodSuspected', type: 'boolean' }
+        { name: 'Topic', type: 'string' }
+        { name: 'UnauthorizedPublish', type: 'boolean' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
+// 함대관리 API + RTSP + 스웜조정(S81/S83/S106/S108) — fleet-infra-stub fleet-infra.ndjson.
+resource uavFleetInfra 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVFleetInfra_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVFleetInfra_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'FleetId', type: 'string' }
+        { name: 'RequesterId', type: 'string' }
+        { name: 'TargetId', type: 'string' }
+        { name: 'IdorSuspected', type: 'boolean' }
+        { name: 'StreamId', type: 'string' }
+        { name: 'SessionId', type: 'string' }
+        { name: 'ClientIp', type: 'string' }
+        { name: 'HijackSuspected', type: 'boolean' }
+        { name: 'Rule', type: 'string' }
+        { name: 'ValueBefore', type: 'real' }
+        { name: 'ValueAfter', type: 'real' }
+        { name: 'ChangedBy', type: 'string' }
+        { name: 'LinkA', type: 'string' }
+        { name: 'LinkB', type: 'string' }
+        { name: 'LinkStatus', type: 'string' }
+        { name: 'Reason', type: 'string' }
+        { name: 'StatusCode', type: 'int' }
+      ]
+    }
+  }
+}
+
+// S121 방어 — SITL 직결 진실값(datalink-los 중계 우회). ground-truth-tap.
+resource uavGroundTruth 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVGroundTruth_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVGroundTruth_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'GroundTruthCustomMode', type: 'int' }
+        { name: 'Source', type: 'string' }
       ]
     }
   }
@@ -885,3 +1108,10 @@ output counterUasTableName string = uavCounterUas.name
 output counterUasTableId string = uavCounterUas.id
 output webAuditTableName string = uavWebAudit.name
 output archiveAuditTableName string = uavArchiveAudit.name
+output fileAuditTableName string = uavFileAudit.name
+output rcLinkTableName string = uavRcLink.name
+output supplyChainTableName string = uavSupplyChain.name
+output companionTableName string = uavCompanion.name
+output devOpsTableName string = uavDevOps.name
+output fleetInfraTableName string = uavFleetInfra.name
+output groundTruthTableName string = uavGroundTruth.name

@@ -1,7 +1,10 @@
-// Tertiary DCR — KUS-FS 확장(편대 + SATCOM + 카운터-UAS + IT계층 웹감사) 7개 스트림.
+// Tertiary DCR — KUS-FS 확장(편대 + SATCOM + 카운터-UAS + IT계층 웹감사 + 파일감사 +
+// RC/WiFi링크 + 공급망) 10개 스트림 — 이 DCR의 10-logFiles 한도를 채운다.
 // primary(dcr.bicep, 10) / extras(dcr-extras.bicep, 9)가 10-logFiles/DCR 한계에
 // 가까워 신규 테이블은 이 세 번째 DCR로 분리한다. 동일 DCE + workspace 사용.
 // UAVGcsAccess_CL 은 pollack-ai/deploy/sentinel-tables 의 dcr-uav-soc 로 이관(소유권 SOC).
+// UAVFileAudit_CL: FleetState 와 동일 패턴 — 테이블+스트림+logFiles 소스는 선등록,
+// 실제 NDJSON 을 쓰는 Falco/eBPF 프로듀서는 아직 이 repo에 없어 당분간 미적재.
 //
 //   az deployment group create -g dah-data-rg -f dcr-ext2.bicep -n dcr-ext2-mvp \
 //     -p workspaceName=dah-data-law
@@ -38,6 +41,15 @@ param webAuditLogPath string = '/var/log/uav-sim-env/web.ndjson'
 @description('아카이브 추출 감사 NDJSON 경로 (web-stub, S53~S55).')
 param archiveAuditLogPath string = '/var/log/uav-sim-env/web-archive.ndjson'
 
+@description('파일/프로세스 실행 감사 NDJSON 경로 (Falco/eBPF — 프로듀서 미구현, 선등록).')
+param fileAuditLogPath string = '/var/log/uav-sim-env/file-audit.ndjson'
+
+@description('WiFi/RC 링크 공격면 NDJSON 경로 (rc-link-stub).')
+param rcLinkLogPath string = '/var/log/uav-sim-env/rc-link.ndjson'
+
+@description('공급망(아티팩트 서명·mTLS) NDJSON 경로 (supply-chain-stub).')
+param supplyChainLogPath string = '/var/log/uav-sim-env/supply-chain.ndjson'
+
 var dceName = '${namePrefix}-dce'
 var dcrName = '${namePrefix}-uav-dcr-ext2'
 
@@ -48,6 +60,9 @@ var fleetStateStreamName = 'Custom-UAVFleetState'
 var counterUasStreamName = 'Custom-UAVCounterUas'
 var webAuditStreamName = 'Custom-UAVWebAudit'
 var archiveAuditStreamName = 'Custom-UAVArchiveAudit'
+var fileAuditStreamName = 'Custom-UAVFileAudit'
+var rcLinkStreamName = 'Custom-UAVRcLink'
+var supplyChainStreamName = 'Custom-UAVSupplyChain'
 
 var satcomTableName = 'UAVSatcomLink_CL'
 var sarTableName = 'UAVSarPayload_CL'
@@ -56,6 +71,9 @@ var fleetStateTableName = 'UAVFleetState_CL'
 var counterUasTableName = 'UAVCounterUas_CL'
 var webAuditTableName = 'UAVWebAudit_CL'
 var archiveAuditTableName = 'UAVArchiveAudit_CL'
+var fileAuditTableName = 'UAVFileAudit_CL'
+var rcLinkTableName = 'UAVRcLink_CL'
+var supplyChainTableName = 'UAVSupplyChain_CL'
 
 resource law 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -101,6 +119,7 @@ var routerStatsStreamColumns = [
   { name: 'MsgTx', type: 'long' }
   { name: 'MsgDropped', type: 'long' }
   { name: 'CrcErrors', type: 'long' }
+  { name: 'UnexpectedEndpoint', type: 'boolean' }
 ]
 
 var fleetStateStreamColumns = [
@@ -111,6 +130,9 @@ var fleetStateStreamColumns = [
   { name: 'DivergingCount', type: 'int' }
   { name: 'CommonCommand', type: 'string' }
   { name: 'AnomalyScore', type: 'real' }
+  { name: 'MinPairDistanceDeg', type: 'real' }
+  { name: 'CollisionRiskPair', type: 'string' }
+  { name: 'UnknownUavIdDetected', type: 'boolean' }
 ]
 
 var counterUasStreamColumns = [
@@ -157,6 +179,7 @@ var webAuditStreamColumns = [
   { name: 'CronEntry', type: 'string' }
   { name: 'InstalledBy', type: 'string' }
   { name: 'StatusCode', type: 'int' }
+  { name: 'AlarmsInhibited', type: 'boolean' }
 ]
 
 var archiveAuditStreamColumns = [
@@ -170,6 +193,50 @@ var archiveAuditStreamColumns = [
   { name: 'SymlinkEscapeDetected', type: 'boolean' }
   { name: 'ExtractedCount', type: 'int' }
   { name: 'BlockedCount', type: 'int' }
+  { name: 'StatusCode', type: 'int' }
+]
+
+var fileAuditStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'ContainerName', type: 'string' }
+  { name: 'Pid', type: 'int' }
+  { name: 'ProcessName', type: 'string' }
+  { name: 'Operation', type: 'string' }
+  { name: 'FilePath', type: 'string' }
+  { name: 'BytesAccessed', type: 'long' }
+  { name: 'User', type: 'string' }
+  { name: 'Syscall', type: 'string' }
+  { name: 'LogBearingTargetSuspected', type: 'boolean' }
+  { name: 'PersistenceTargetSuspected', type: 'boolean' }
+]
+
+var rcLinkStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'EventType', type: 'string' }
+  { name: 'DeviceId', type: 'string' }
+  { name: 'UavId', type: 'string' }
+  { name: 'Ssid', type: 'string' }
+  { name: 'BssidMismatch', type: 'boolean' }
+  { name: 'DefaultCredentialUsed', type: 'boolean' }
+  { name: 'BindCodeReused', type: 'boolean' }
+  { name: 'Channel', type: 'int' }
+  { name: 'ChannelValue', type: 'int' }
+  { name: 'OverrideAuthorized', type: 'boolean' }
+  { name: 'ProtocolRequested', type: 'string' }
+  { name: 'ProtocolNegotiated', type: 'string' }
+  { name: 'DowngradeDetected', type: 'boolean' }
+  { name: 'StatusCode', type: 'int' }
+]
+
+var supplyChainStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'EventType', type: 'string' }
+  { name: 'Subject', type: 'string' }
+  { name: 'Issuer', type: 'string' }
+  { name: 'SignatureValid', type: 'boolean' }
+  { name: 'BypassSuspected', type: 'boolean' }
+  { name: 'CertSerial', type: 'string' }
+  { name: 'CertForgedSuspected', type: 'boolean' }
   { name: 'StatusCode', type: 'int' }
 ]
 
@@ -187,6 +254,9 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       '${counterUasStreamName}': { columns: counterUasStreamColumns }
       '${webAuditStreamName}': { columns: webAuditStreamColumns }
       '${archiveAuditStreamName}': { columns: archiveAuditStreamColumns }
+      '${fileAuditStreamName}': { columns: fileAuditStreamColumns }
+      '${rcLinkStreamName}': { columns: rcLinkStreamColumns }
+      '${supplyChainStreamName}': { columns: supplyChainStreamColumns }
     }
     dataSources: {
       logFiles: [
@@ -197,6 +267,9 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
         { name: 'uavCounterUasFile', streams: [ counterUasStreamName ], filePatterns: [ counterUasLogPath ], format: 'json' }
         { name: 'uavWebAuditFile', streams: [ webAuditStreamName ], filePatterns: [ webAuditLogPath ], format: 'json' }
         { name: 'uavArchiveAuditFile', streams: [ archiveAuditStreamName ], filePatterns: [ archiveAuditLogPath ], format: 'json' }
+        { name: 'uavFileAuditFile', streams: [ fileAuditStreamName ], filePatterns: [ fileAuditLogPath ], format: 'json' }
+        { name: 'uavRcLinkFile', streams: [ rcLinkStreamName ], filePatterns: [ rcLinkLogPath ], format: 'json' }
+        { name: 'uavSupplyChainFile', streams: [ supplyChainStreamName ], filePatterns: [ supplyChainLogPath ], format: 'json' }
       ]
     }
     destinations: {
@@ -212,6 +285,9 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       { streams: [ counterUasStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${counterUasTableName}' }
       { streams: [ webAuditStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${webAuditTableName}' }
       { streams: [ archiveAuditStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${archiveAuditTableName}' }
+      { streams: [ fileAuditStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${fileAuditTableName}' }
+      { streams: [ rcLinkStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${rcLinkTableName}' }
+      { streams: [ supplyChainStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${supplyChainTableName}' }
     ]
   }
 }

@@ -93,6 +93,8 @@ var authStreamColumns = [
   { name: 'SessionId', type: 'string' }
   { name: 'FailReason', type: 'string' }
   { name: 'StatusCode', type: 'int' }
+  { name: 'TargetOperator', type: 'string' }
+  { name: 'Detail', type: 'string' }
 ]
 
 var failsafeStreamColumns = [
