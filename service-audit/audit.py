@@ -27,6 +27,28 @@ INTERESTING_ACTIONS: frozenset[str] = frozenset({
     "connect", "disconnect",
 })
 
+# S47(드론 anti-forensics/로그삭제)·S66(데이터 파괴) — 전용 공격 코드는 없지만,
+# 이 서비스가 이미 관측 중인 Docker 데몬 이벤트만으로도 "로그를 만들어내는 자산 자체를
+# 파괴/삭제"하는 행위는 실제로 잡을 수 있다(신규 producer 불필요, 기존 신호 재해석).
+DESTRUCTIVE_ACTIONS: frozenset[str] = frozenset({"destroy", "delete", "kill"})
+LOG_BEARING_NAME_HINTS: tuple[str, ...] = (
+    "telemetry-tap", "datalink-satcom", "datalink-los", "gcs-qgc", "counter-uas",
+    "sar-stub", "pgse-stub", "auth-stub", "ti-stub", "mps-stub", "c4i-stub",
+    "weapon-stub", "cyber-posture-stub", "service-audit", "fluentbit",
+    "log", "ndjson",
+)
+
+
+def _is_log_bearing(name: str) -> bool:
+    """True if a container/volume name hints it holds or produces NDJSON logs.
+
+    Heuristic name-match only (no filesystem access) — flags the destruction
+    of the telemetry pipeline's own components as a distinct signal from
+    ordinary container lifecycle churn.
+    """
+    lowered = (name or "").lower()
+    return any(hint in lowered for hint in LOG_BEARING_NAME_HINTS)
+
 
 def _log(line: str) -> None:
     sys.stderr.write(f"[service-audit] {line}\n")
@@ -45,18 +67,26 @@ def _record_from_event(event: dict[str, Any]) -> dict[str, Any]:
     """Project a Docker engine event into a flat NDJSON record matching the DCR stream schema."""
     actor = event.get("Actor") or {}
     attrs = actor.get("Attributes") or {}
+    action = event.get("Action") or event.get("status") or ""
+    base_action = action.split(":", 1)[0]
+    container_name = attrs.get("name", "")
+    actor_id = actor.get("ID") or event.get("id") or ""
+    target_name = container_name or actor_id
     return {
         "TimeGenerated": _now_iso(),
         "EventType": event.get("Type"),
-        "Action": event.get("Action") or event.get("status"),
-        "ActorId": actor.get("ID") or event.get("id"),
-        "ContainerName": attrs.get("name", ""),
+        "Action": action,
+        "ActorId": actor_id,
+        "ContainerName": container_name,
         "ImageName": attrs.get("image", "") or event.get("from", ""),
         "ExitCode": str(attrs.get("exitCode", "")),
         "Signal": str(attrs.get("signal", "")),
         "ServiceLabel": attrs.get("com.docker.compose.service", ""),
         "ProjectLabel": attrs.get("com.docker.compose.project", ""),
         "Scope": event.get("scope") or "",
+        # S47/S66 — 기존 신호(Action/ContainerName)만으로 파생하는 파괴행위 지표.
+        "IsDestructiveAction": base_action in DESTRUCTIVE_ACTIONS,
+        "LogBearingTargetSuspected": _is_log_bearing(target_name),
     }
 
 

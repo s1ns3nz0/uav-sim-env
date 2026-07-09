@@ -29,7 +29,7 @@ spec:
         - { key: dedicated, operator: Equal, value: satcom, effect: NoSchedule }
       containers:
         - name: datalink-satcom
-          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ default $.Values.image.tag .imageTag }}
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           env:
             {{- range $k, $v := .env }}

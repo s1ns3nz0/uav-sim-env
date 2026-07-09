@@ -156,6 +156,8 @@ fluentBit:
     # DCR = dcr-uav-soc (pollack-ai/deploy/sentinel-tables 배포), SP Monitoring Metrics Publisher 권한 부여 완료.
     # marker=Transport — nginx log_format gcs_ndjson 항상 채움(novnc), uvicorn 등 평문 거름.
     - { container: gcs-qgc,            dcrId: "dcr-d76b745555c64a8a82ca23d22fda9f15", stream: "UAVGcsAccess_CL", marker: "Transport" }
+    # counter-uas (ext2 DCR) — RF 탐지/재밍 교전 NDJSON. marker EventType(rf_detection|jam_engagement).
+    - { container: counter-uas,        dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVCounterUas",   marker: "EventType" }
 
 # HTTPS Ingress (ingress-nginx + cert-manager 설치 후 enable). 기본 off(kind).
 ingress:

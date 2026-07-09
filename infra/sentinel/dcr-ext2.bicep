@@ -1,4 +1,4 @@
-// Tertiary DCR — KUS-FS 확장(편대 + SATCOM) 4개 스트림.
+// Tertiary DCR — KUS-FS 확장(편대 + SATCOM + 카운터-UAS) 5개 스트림.
 // primary(dcr.bicep, 10) / extras(dcr-extras.bicep, 9)가 10-logFiles/DCR 한계에
 // 가까워 신규 테이블은 이 세 번째 DCR로 분리한다. 동일 DCE + workspace 사용.
 // UAVGcsAccess_CL 은 pollack-ai/deploy/sentinel-tables 의 dcr-uav-soc 로 이관(소유권 SOC).
@@ -29,6 +29,9 @@ param routerStatsLogPath string = '/var/log/uav-sim-env/router-stats.ndjson'
 @description('편대 상태 요약 NDJSON 경로 (telemetry-tap 파생).')
 param fleetStateLogPath string = '/var/log/uav-sim-env/fleet-state.ndjson'
 
+@description('카운터-UAS RF 탐지·재밍 교전 NDJSON 경로 (counter-uas).')
+param counterUasLogPath string = '/var/log/uav-sim-env/counter-uas.ndjson'
+
 var dceName = '${namePrefix}-dce'
 var dcrName = '${namePrefix}-uav-dcr-ext2'
 
@@ -36,11 +39,13 @@ var satcomStreamName = 'Custom-UAVSatcomLink'
 var sarStreamName = 'Custom-UAVSarPayload'
 var routerStatsStreamName = 'Custom-UAVRouterStats'
 var fleetStateStreamName = 'Custom-UAVFleetState'
+var counterUasStreamName = 'Custom-UAVCounterUas'
 
 var satcomTableName = 'UAVSatcomLink_CL'
 var sarTableName = 'UAVSarPayload_CL'
 var routerStatsTableName = 'UAVRouterStats_CL'
 var fleetStateTableName = 'UAVFleetState_CL'
+var counterUasTableName = 'UAVCounterUas_CL'
 
 resource law 'Microsoft.OperationalInsights/workspaces@2023-09-01' existing = {
   name: workspaceName
@@ -61,6 +66,10 @@ var satcomStreamColumns = [
   { name: 'JamIndicator', type: 'real' }
   { name: 'SrcAddr', type: 'string' }
   { name: 'DstAddr', type: 'string' }
+  { name: 'Mode', type: 'string' }
+  { name: 'Encoding', type: 'string' }
+  { name: 'PayloadEntropy', type: 'real' }
+  { name: 'BeaconJitterSec', type: 'real' }
 ]
 
 var sarStreamColumns = [
@@ -93,6 +102,30 @@ var fleetStateStreamColumns = [
   { name: 'AnomalyScore', type: 'real' }
 ]
 
+var counterUasStreamColumns = [
+  { name: 'TimeGenerated', type: 'datetime' }
+  { name: 'EventType', type: 'string' }
+  { name: 'UAVId', type: 'string' }
+  { name: 'Seq', type: 'long' }
+  { name: 'TrackId', type: 'string' }
+  { name: 'Band', type: 'string' }
+  { name: 'CenterFreqMHz', type: 'real' }
+  { name: 'Rssi_dBm', type: 'real' }
+  { name: 'EstRange_m', type: 'real' }
+  { name: 'TrueRange_m', type: 'real' }
+  { name: 'Bearing_deg', type: 'real' }
+  { name: 'Classification', type: 'string' }
+  { name: 'Protocol', type: 'string' }
+  { name: 'TargetBand', type: 'string' }
+  { name: 'JamFreqMHz', type: 'real' }
+  { name: 'JamMode', type: 'string' }
+  { name: 'JamEirp_dBm', type: 'real' }
+  { name: 'JsRatio_dB', type: 'real' }
+  { name: 'Effect', type: 'string' }
+  { name: 'Status', type: 'string' }
+  { name: 'ReasonCode', type: 'string' }
+]
+
 resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
   name: dcrName
   location: location
@@ -104,6 +137,7 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       '${sarStreamName}': { columns: sarStreamColumns }
       '${routerStatsStreamName}': { columns: routerStatsStreamColumns }
       '${fleetStateStreamName}': { columns: fleetStateStreamColumns }
+      '${counterUasStreamName}': { columns: counterUasStreamColumns }
     }
     dataSources: {
       logFiles: [
@@ -111,6 +145,7 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
         { name: 'uavSarFile', streams: [ sarStreamName ], filePatterns: [ sarLogPath ], format: 'json' }
         { name: 'uavRouterStatsFile', streams: [ routerStatsStreamName ], filePatterns: [ routerStatsLogPath ], format: 'json' }
         { name: 'uavFleetStateFile', streams: [ fleetStateStreamName ], filePatterns: [ fleetStateLogPath ], format: 'json' }
+        { name: 'uavCounterUasFile', streams: [ counterUasStreamName ], filePatterns: [ counterUasLogPath ], format: 'json' }
       ]
     }
     destinations: {
@@ -123,6 +158,7 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       { streams: [ sarStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${sarTableName}' }
       { streams: [ routerStatsStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${routerStatsTableName}' }
       { streams: [ fleetStateStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${fleetStateTableName}' }
+      { streams: [ counterUasStreamName ], destinations: [ 'centralLaw' ], transformKql: 'source', outputStream: 'Custom-${counterUasTableName}' }
     ]
   }
 }

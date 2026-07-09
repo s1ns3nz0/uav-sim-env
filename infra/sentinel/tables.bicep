@@ -74,6 +74,12 @@ resource uavTelemetry 'Microsoft.OperationalInsights/workspaces/tables@2023-09-0
         { name: 'VelGround_cms', type: 'int' }
         { name: 'CourseOverGround_cdeg', type: 'int' }
 
+        // GPS_INPUT — 외부 주입 API(실 GPS 수신기는 미생성). 존재=스푸핑/주입 신호(S1/S61).
+        { name: 'GpsInputInjected', type: 'boolean' }
+        { name: 'Hdop', type: 'real' }
+        { name: 'Vdop', type: 'real' }
+        { name: 'IgnoreFlags', type: 'int' }
+
         // Attitude
         { name: 'Roll_rad', type: 'real' }
         { name: 'Pitch_rad', type: 'real' }
@@ -259,6 +265,9 @@ resource uavServiceAudit 'Microsoft.OperationalInsights/workspaces/tables@2023-0
         { name: 'ServiceLabel', type: 'string' }
         { name: 'ProjectLabel', type: 'string' }
         { name: 'Scope', type: 'string' }
+        // S47(anti-forensics/로그삭제)·S66(데이터 파괴) — 기존 Docker 이벤트 파생 지표.
+        { name: 'IsDestructiveAction', type: 'boolean' }
+        { name: 'LogBearingTargetSuspected', type: 'boolean' }
       ]
     }
   }
@@ -654,6 +663,11 @@ resource uavSatcomLink 'Microsoft.OperationalInsights/workspaces/tables@2023-09-
         { name: 'JamIndicator', type: 'real' }
         { name: 'SrcAddr', type: 'string' }
         { name: 'DstAddr', type: 'string' }
+        { name: 'Mode', type: 'string' }
+        // S65 C2 은닉(터널링/암호화/난독화/인코딩) 지표 — datalink-satcom covert 모드.
+        { name: 'Encoding', type: 'string' }
+        { name: 'PayloadEntropy', type: 'real' }
+        { name: 'BeaconJitterSec', type: 'real' }
       ]
     }
   }
@@ -730,6 +744,43 @@ resource uavFleetState 'Microsoft.OperationalInsights/workspaces/tables@2023-09-
   }
 }
 
+// 카운터-UAS RF 탐지·재밍 교전 — counter-uas 시뮬(송신 없음).
+resource uavCounterUas 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: law
+  name: 'UAVCounterUas_CL'
+  properties: {
+    plan: 'Analytics'
+    retentionInDays: 90
+    totalRetentionInDays: 180
+    schema: {
+      name: 'UAVCounterUas_CL'
+      columns: [
+        { name: 'TimeGenerated', type: 'datetime' }
+        { name: 'EventType', type: 'string' }
+        { name: 'UAVId', type: 'string' }
+        { name: 'Seq', type: 'long' }
+        { name: 'TrackId', type: 'string' }
+        { name: 'Band', type: 'string' }
+        { name: 'CenterFreqMHz', type: 'real' }
+        { name: 'Rssi_dBm', type: 'real' }
+        { name: 'EstRange_m', type: 'real' }
+        { name: 'TrueRange_m', type: 'real' }
+        { name: 'Bearing_deg', type: 'real' }
+        { name: 'Classification', type: 'string' }
+        { name: 'Protocol', type: 'string' }
+        { name: 'TargetBand', type: 'string' }
+        { name: 'JamFreqMHz', type: 'real' }
+        { name: 'JamMode', type: 'string' }
+        { name: 'JamEirp_dBm', type: 'real' }
+        { name: 'JsRatio_dB', type: 'real' }
+        { name: 'Effect', type: 'string' }
+        { name: 'Status', type: 'string' }
+        { name: 'ReasonCode', type: 'string' }
+      ]
+    }
+  }
+}
+
 output tableName string = uavTelemetry.name
 output tableId string = uavTelemetry.id
 output pgseTableName string = uavPgse.name
@@ -756,3 +807,5 @@ output satcomLinkTableName string = uavSatcomLink.name
 output sarPayloadTableName string = uavSarPayload.name
 output routerStatsTableName string = uavRouterStats.name
 output fleetStateTableName string = uavFleetState.name
+output counterUasTableName string = uavCounterUas.name
+output counterUasTableId string = uavCounterUas.id

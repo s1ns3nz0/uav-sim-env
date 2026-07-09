@@ -107,26 +107,32 @@ python3 -m pytest tests/ -q
 | helm 템플릿 | ✅ `local-k8s/helm/uav-sim/templates/counter-uas.yaml` (ns: ground) |
 | values 블록 | ✅ `values.yaml` 의 `counterUas:` (enabled, env) |
 | kind 빌드 등록 | ✅ `local-k8s/up.sh` 에 `build_load uavsim/counter-uas:local` |
-| Sentinel 적재 | ⏳ 아래 "남은 단계" (DCR 스트림 + 테이블 + fluentbit 1줄) |
+| Sentinel 적재 | ✅ IaC 정의 완료(`UAVCounterUas_CL` 테이블 + ext2 DCR 스트림 + fluentbit 등록 + AKS `sitl` 재배치) — ⏳ *미배포*: `scripts/full-ingest.sh` 재실행 필요 |
 
 `cd local-k8s && bash up.sh` 하면 kind 에서 counter-uas 가 ground 네임스페이스에
 함께 뜬다(fluentbit 는 kind 에서 off 이므로 NDJSON 은 pod stdout 으로 확인:
 `kubectl -n ground logs deploy/counter-uas`).
 
-### Sentinel 적재(AKS) — 남은 단계
+### Sentinel 적재(AKS) — 완료(IaC), 배포 대기
 
-NDJSON 17→18 스트림 패턴에 그대로 얹는다:
+NDJSON 17→18(ext2 4→5) 스트림 패턴에 그대로 얹었다:
 
-1. **테이블** `UAVCounterUas_CL` 추가 — `infra/sentinel/tables.bicep`. 컬럼:
+1. **테이블** `UAVCounterUas_CL` 추가 완료 — `infra/sentinel/tables.bicep`. 컬럼:
    `TimeGenerated, EventType, UAVId, Seq, TrackId, Band, CenterFreqMHz, Rssi_dBm,
    EstRange_m, TrueRange_m, Bearing_deg, Classification, Protocol,
    TargetBand, JamFreqMHz, JamMode, JamEirp_dBm, JsRatio_dB, Effect, Status, ReasonCode`.
-2. **DCR 스트림** `Custom-UAVCounterUas` 추가(예: ext2 DCR `dcr-1aad0b1c...`).
-3. **fluentbit 1줄** — `values.yaml` 의 `fluentBit.streams` 에 추가:
+2. **DCR 스트림** `Custom-UAVCounterUas` 추가 완료 — ext2 DCR(`dcr-1aad0b1cd2f9416e9fb954b402abc58d`), `dcr-ext2.bicep`.
+3. **fluentbit 1줄** 추가 완료 — `values.yaml` 의 `fluentBit.streams`:
    ```yaml
    - { container: counter-uas, dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVCounterUas", marker: "EventType" }
    ```
    (마커 `EventType` 는 항상 문자열 — `rewrite_tag` integer 매칭 함정 회피.)
+4. **노드풀 재배치** — 기본(`values.yaml`) `nodePool: system` 은 (a) maxPods 꽉 참 (b) fluentbit
+   node affinity 밖(`sitl`/`satcom` 만 커버)이라 로그가 유실된다. `values-aks.yaml` 에
+   `counterUas: { nodePool: sitl }` 오버라이드 추가 완료.
+5. **남은 단계**: `az deployment group create -f infra/sentinel/dcr-ext2.bicep ...` +
+   `scripts/full-ingest.sh` 재실행으로 실제 워크스페이스에 반영, 이후 `docs/sentinel-schemas.md`
+   §20.6 예시로 라이브 인입 확인.
 
 ### 비행 시뮬과 연동(선택)
 

@@ -440,6 +440,22 @@ def _record_for(msg: Any) -> dict[str, Any]:
             "CourseOverGround_cdeg": msg.cog,
             "SatellitesVisible": msg.satellites_visible,
         })
+    elif msg_type == "GPS_INPUT":
+        # GPS_INPUT는 외부 주입 API 메시지 — 실제 온보드 GPS 수신기는 스스로
+        # 이 메시지를 만들지 않는다. 존재 자체가 GNSS 스푸핑/주입 신호
+        # (S1 GNSS 스푸핑, S61 GNSS 나포). EKF_STATUS_REPORT 분산치와 상관하면
+        # 주입 시점→EKF 이상 반응까지 인과관계로 추적 가능.
+        record.update({
+            "GpsInputInjected": True,
+            "Lat": msg.lat / 1e7,
+            "Lon": msg.lon / 1e7,
+            "AltMSL_m": msg.alt,
+            "FixType": msg.fix_type,
+            "Hdop": msg.hdop,
+            "Vdop": msg.vdop,
+            "SatellitesVisible": msg.satellites_visible,
+            "IgnoreFlags": msg.ignore_flags,
+        })
     elif msg_type == "ATTITUDE":
         record.update({
             "Roll_rad": msg.roll,

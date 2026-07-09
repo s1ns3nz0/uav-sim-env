@@ -107,6 +107,10 @@ var streamColumns = [
   { name: 'Epv_cm', type: 'int' }
   { name: 'VelGround_cms', type: 'int' }
   { name: 'CourseOverGround_cdeg', type: 'int' }
+  { name: 'GpsInputInjected', type: 'boolean' }
+  { name: 'Hdop', type: 'real' }
+  { name: 'Vdop', type: 'real' }
+  { name: 'IgnoreFlags', type: 'int' }
   { name: 'Roll_rad', type: 'real' }
   { name: 'Pitch_rad', type: 'real' }
   { name: 'Yaw_rad', type: 'real' }
@@ -217,6 +221,8 @@ var serviceAuditStreamColumns = [
   { name: 'ServiceLabel', type: 'string' }
   { name: 'ProjectLabel', type: 'string' }
   { name: 'Scope', type: 'string' }
+  { name: 'IsDestructiveAction', type: 'boolean' }
+  { name: 'LogBearingTargetSuspected', type: 'boolean' }
 ]
 
 var mpsStreamColumns = [

@@ -15,6 +15,9 @@ we model the link characteristics and expose a control surface to drive the S3
     replay    -> IntegrityStatus = replay + Seq regress   (replay / MITM)
     hijack    -> SessionId changes mid-stream on same LinkId (S3-satcom-session-hijack)
     jam       -> JamIndicator high + RttMs anomaly        (jamming)
+    covert    -> Encoding=tunnel/obfuscated, PayloadEntropy 급등, 규칙적 BeaconIntervalSec
+                 (S65 C2 은닉 — 터널링/암호화/난독화/인코딩. UAVOperator_CL의 평문 명령
+                 트래픽과 달리, 은닉 C2는 링크 계층 자체의 엔트로피·비콘 규칙성으로만 드러남)
 
 A background thread emits one link-status record every EMIT_INTERVAL_SEC.
 """
@@ -53,7 +56,7 @@ _lock = threading.Lock()
 _state: dict[str, Any] = {
     "session_id": "S-1001",
     "seq": 0,
-    "mode": "normal",     # normal | integrity | replay | jam
+    "mode": "normal",     # normal | integrity | replay | jam | covert
     "mode_until": 0.0,    # epoch seconds; 0 = persistent (normal)
 }
 
@@ -86,6 +89,10 @@ def _build_record() -> dict[str, Any]:
         integrity = "ok"
         jam = round(random.uniform(0.0, 0.05), 3)
         rtt = round(GEO_RTT_MS + random.uniform(-8, 8), 1)
+        # 은닉 C2(S65) 지표 — 평문 MAVLink 근사 기본값(낮은 엔트로피, 불규칙 비콘).
+        encoding = "none"
+        payload_entropy = round(random.uniform(3.5, 5.0), 2)
+        beacon_jitter_sec = round(random.uniform(0.5, 4.0), 2)
 
         if mode == "integrity":
             integrity = "signature_mismatch"
@@ -95,6 +102,13 @@ def _build_record() -> dict[str, Any]:
         elif mode == "jam":
             jam = round(random.uniform(0.6, 0.95), 3)
             rtt = round(GEO_RTT_MS + random.uniform(200, 1200), 1)
+        elif mode == "covert":
+            # S65 C2 은닉(터널링/암호화/난독화/인코딩): 페이로드 엔트로피 급등 +
+            # 규칙적(저지터) 비콘 — 링크 자체는 정상(재밍·무결성 이상 없음)이라
+            # UAVOperator_CL 명령 감사로는 안 잡히고 이 링크계층 지표로만 드러난다.
+            encoding = random.choice(["base64_tunnel", "xor_obfuscated", "dns_like_encode"])
+            payload_entropy = round(random.uniform(7.5, 7.99), 2)
+            beacon_jitter_sec = round(random.uniform(0.0, 0.15), 2)
 
         return {
             "UAVId": UAV_ID,
@@ -107,6 +121,9 @@ def _build_record() -> dict[str, Any]:
             "SrcAddr": SRC_ADDR,
             "DstAddr": DST_ADDR,
             "Mode": mode,
+            "Encoding": encoding,
+            "PayloadEntropy": payload_entropy,
+            "BeaconJitterSec": beacon_jitter_sec,
         }
 
 
@@ -126,7 +143,7 @@ def _startup() -> None:
 
 
 class InjectRequest(BaseModel):
-    type: Literal["integrity", "replay", "hijack", "jam"]
+    type: Literal["integrity", "replay", "hijack", "jam", "covert"]
     duration_sec: int = Field(30, ge=1, le=3600)
 
 
@@ -143,9 +160,10 @@ def state() -> dict[str, Any]:
 
 @app.post("/satcom/inject", tags=["satcom"])
 def inject(req: InjectRequest) -> dict[str, Any]:
-    """Drive an S3 (SATCOM MITM) condition.
+    """Drive an S3 (SATCOM MITM) or S65 (C2 concealment) condition.
 
-    hijack is a one-shot session change; the others are timed link modes.
+    hijack is a one-shot session change; the others (including covert) are
+    timed link modes.
     """
     with _lock:
         if req.type == "hijack":

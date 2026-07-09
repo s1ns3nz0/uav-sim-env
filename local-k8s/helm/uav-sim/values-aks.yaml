@@ -13,7 +13,7 @@ telemetryTap:
   enabled: true
   nodePool: sitl                 # system 풀 maxPods=30 회피
   stdoutMode: true               # 7 NDJSON 전부 /dev/stdout → FB tail 가능
-  imageTag: v6                   # UAVId = prefix + SysId suffix (편대)
+  imageTag: v7                   # v7: GPS_INPUT 처리(GpsInputInjected/Hdop/Vdop/IgnoreFlags, S1/S61). UAVId = prefix + SysId suffix(편대)
   uavId: "MUAV-AKS"              # prefix 만 — 코드가 "-SYS001/002/003" 박음
 gcsQgc:       { enabled: true, imageTag: v2 }   # v2: nginx access log emitter (UAVGcsAccess_CL)
 fluentBit:    { enabled: true }   # AKS NDJSON → Sentinel 일원화
@@ -24,7 +24,12 @@ c4i: { nodePool: sitl, logPath: /dev/stdout }   # NDJSON 을 stdout 으로 → F
 groundStubsNodePool: sitl
 groundStubsLogToStdout: true                    # 모든 ground 스텁 LOG_FILE_PATH=/dev/stdout
 
+# counter-uas 도 system 풀은 (a) maxPods 꽉 참 (b) fluentbit affinity 밖(sitl/satcom 만 커버)
+# → sitl 로 재배치해야 UAVCounterUas_CL 이 실제로 적재된다.
+counterUas: { nodePool: sitl }
+
 # AKS 출처를 표에서 구별하기 위해 UAV_ID 를 다르게 (검증용)
 datalinkSatcom:
+  imageTag: v2  # v2: covert 모드(S65 C2 은닉 — Encoding/PayloadEntropy/BeaconJitterSec)
   env:
     UAV_ID: "MUAV-AKS-001"
