@@ -13,7 +13,7 @@ telemetryTap:
   enabled: true
   nodePool: sitl                 # system 풀 maxPods=30 회피
   stdoutMode: true               # 7 NDJSON 전부 /dev/stdout → FB tail 가능
-  imageTag: v11                  # v11: ground-truth-tap 능동 heartbeat 송신(1Hz GCS liveness) 추가
+  imageTag: v12                  # v12: ground-truth-tap stdout 중복기록 버그 수정
   uavId: "MUAV-AKS"              # prefix 만 — 코드가 "-SYS001/002/003" 박음
 gcsQgc:       { enabled: true, imageTag: v2 }   # v2: nginx access log emitter (UAVGcsAccess_CL)
 fluentBit:    { enabled: true }   # AKS NDJSON → Sentinel 일원화
@@ -50,7 +50,7 @@ serviceAudit: { nodePool: sitl, imageTag: v3 }  # v3: stdout 중복 기록 버�
 groundTruthTap:
   enabled: true
   nodePool: sitl
-  imageTag: v11
+  imageTag: v12
   uavId: "MUAV-AKS-SYS001"
   sitlTcpAddr: "tcp:av-muav-0.av-muav.air.svc.cluster.local:5762"
 

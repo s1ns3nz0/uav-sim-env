@@ -56,11 +56,15 @@ def _emit(handle, uav_id: str, custom_mode: int) -> None:
         "Source": "direct-sitl-tap",
     }
     line = json.dumps(rec, separators=(",", ":")) + "\n"
-    sys.stdout.write(line)
-    sys.stdout.flush()
+    # GROUND_TRUTH_FILE_PATH=/dev/stdout(fluentBit 모드)일 때 handle 이 stdout 의
+    # 별도 fd 라 sys.stdout 에도 같이 쓰면 매 레코드가 두 번 기록된다
+    # (service-audit 에서 이미 겪은 동일 버그 패턴) — handle 이 있으면 그쪽에만.
     if handle is not None:
         handle.write(line)
         handle.flush()
+    else:
+        sys.stdout.write(line)
+        sys.stdout.flush()
 
 
 def main() -> None:
