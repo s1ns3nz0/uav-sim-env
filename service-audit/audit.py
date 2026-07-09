@@ -112,8 +112,11 @@ def _record_from_event(evt: Any) -> dict[str, Any] | None:
 
 
 def _watch_loop(v1: client.CoreV1Api, handle) -> None:
+    # timeout_seconds=0 은 "무한 대기"가 아니라 즉시 스트림을 닫아버려 이벤트를 받기도
+    # 전에 재연결을 반복하는 버그였다. 지정하지 않으면 서버 기본값(보통 30~60분)까지
+    # 유지되고, 끊기면 바깥 while 루프가 재연결한다.
     w = watch.Watch()
-    for event in w.stream(v1.list_event_for_all_namespaces, timeout_seconds=0):
+    for event in w.stream(v1.list_event_for_all_namespaces):
         record = _record_from_event(event["object"])
         if record is None:
             continue
@@ -141,6 +144,7 @@ def main() -> int:
         while True:
             try:
                 _watch_loop(v1, handle)
+                _log("watch stream closed cleanly, reconnecting")
             except ApiException as exc:
                 _log(f"watch stream error ({exc.status}), reconnecting in 5s")
                 time.sleep(5)

@@ -28,7 +28,7 @@ groundStubsLogToStdout: true                    # 모든 ground 스텁 LOG_FILE_
 # → sitl 로 재배치해야 UAVCounterUas_CL 이 실제로 적재된다.
 counterUas: { nodePool: sitl }
 # service-audit 도 동일한 이유로 sitl 로 배치(신규 컴포넌트라 처음부터 올바른 풀 사용).
-serviceAudit: { nodePool: sitl }
+serviceAudit: { nodePool: sitl, imageTag: v2 }  # v2: watch timeout_seconds=0 버그 수정(이벤트 미수신)
 
 # AKS 출처를 표에서 구별하기 위해 UAV_ID 를 다르게 (검증용)
 datalinkSatcom:
