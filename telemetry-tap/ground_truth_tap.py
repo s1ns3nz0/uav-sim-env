@@ -76,10 +76,22 @@ def main() -> None:
     _log("heartbeat ok, ground-truth tap ready")
 
     last_mode: int | None = None
+    idle_since = None
     while True:
-        msg = conn.recv_match(type="HEARTBEAT", blocking=True, timeout=10.0)
+        # 배포 후 recv_match(type="HEARTBEAT", ...)가 조용히 매칭 안 되는 현상이
+        # 있어(진단 중), tap.py 의 검증된 패턴(무필터 수신 후 get_type() 확인)으로
+        # 통일 — 매칭 안 되고 그냥 블로킹만 되는 경로를 없앤다.
+        msg = conn.recv_match(blocking=True, timeout=10.0)
         if msg is None:
+            import time as _t
+            now = _t.time()
+            if idle_since is None or now - idle_since > 30:
+                _log(f"no message in last 10s (last_mode={last_mode})")
+                idle_since = now
             continue
+        if msg.get_type() != "HEARTBEAT":
+            continue
+        idle_since = None
         current_mode = msg.custom_mode
         if current_mode != last_mode:
             _emit(handle, UAV_ID, current_mode)
