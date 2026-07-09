@@ -75,21 +75,32 @@ def main() -> None:
     conn.wait_heartbeat(timeout=60)
     _log("heartbeat ok, ground-truth tap ready")
 
+    # 이 tap 은 TCP 클라이언트로 능동 접속(datalink-los 처럼 서버가 push 해주는
+    # udpin 방식이 아님) — 진단 결과 첫 heartbeat 이후 스트림이 조용해지는 현상
+    # 확인. 표준 MAVLink GCS 클라이언트처럼 자체 heartbeat 를 1Hz 로 송신해
+    # "활성 GCS" 로 등록시킨다(REQUEST_DATA_STREAM 없이도 HEARTBEAT 는 보통
+    # 항상 브로드캐스트되지만, 클라이언트 쪽 무응답으로 링크가 유휴/정리되는
+    # 경로를 배제하기 위한 방어적 조치).
+    import time as _t
+
     last_mode: int | None = None
     idle_since = None
+    last_hb_sent = 0.0
     while True:
-        # 배포 후 recv_match(type="HEARTBEAT", ...)가 조용히 매칭 안 되는 현상이
-        # 있어(진단 중), tap.py 의 검증된 패턴(무필터 수신 후 get_type() 확인)으로
-        # 통일 — 매칭 안 되고 그냥 블로킹만 되는 경로를 없앤다.
-        msg = conn.recv_match(blocking=True, timeout=10.0)
+        now = _t.time()
+        if now - last_hb_sent >= 1.0:
+            conn.mav.heartbeat_send(
+                mavutil.mavlink.MAV_TYPE_GCS,
+                mavutil.mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0,
+            )
+            last_hb_sent = now
+        msg = conn.recv_match(blocking=True, timeout=2.0)
         if msg is None:
-            import time as _t
-            now = _t.time()
             if idle_since is None or now - idle_since > 30:
-                _log(f"no message in last 10s (last_mode={last_mode})")
+                _log(f"no message in last 2s (last_mode={last_mode})")
                 idle_since = now
             continue
-        if msg.get_type() != "HEARTBEAT":
+        if msg.get_type() != "HEARTBEAT" or msg.get_srcSystem() == 253:
             continue
         idle_since = None
         current_mode = msg.custom_mode
