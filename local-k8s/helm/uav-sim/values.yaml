@@ -57,6 +57,14 @@ counterUas:
     RX_SENSITIVITY_DBM: "-95"
     LOG_FILE_PATH: /dev/stdout  # NDJSON → stdout → Fluent Bit → UAVCounterUas_CL
 
+# service-audit — Kubernetes Event(파드 생애주기) 관측. AKS=containerd 라 docker.sock
+# 대신 core/v1 Event watch(ClusterRole: get/list/watch on events).
+serviceAudit:
+  enabled: true
+  image: service-audit
+  nodePool: system
+  logPath: /dev/stdout   # NDJSON → stdout → Fluent Bit → UAVServiceAudit_CL
+
 # c4i — c4i-stub (ATCIS/MIMS 핸드오프 종단)
 c4i:
   enabled: true
@@ -158,6 +166,8 @@ fluentBit:
     - { container: gcs-qgc,            dcrId: "dcr-d76b745555c64a8a82ca23d22fda9f15", stream: "UAVGcsAccess_CL", marker: "Transport" }
     # counter-uas (ext2 DCR) — RF 탐지/재밍 교전 NDJSON. marker EventType(rf_detection|jam_engagement).
     - { container: counter-uas,        dcrId: "dcr-1aad0b1cd2f9416e9fb954b402abc58d", stream: "UAVCounterUas",   marker: "EventType" }
+    # service-audit (primary DCR) — Kubernetes Event 기반 파드 생애주기. marker EventType(예: "Pod").
+    - { container: service-audit,      dcrId: "dcr-5c6adbefd9f449799791298a56d92189", stream: "UAVServiceAudit", marker: "EventType" }
 
 # HTTPS Ingress (ingress-nginx + cert-manager 설치 후 enable). 기본 off(kind).
 ingress:

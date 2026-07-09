@@ -1,4 +1,4 @@
-# service-audit — Docker daemon events -> NDJSON for UAVServiceAudit_CL.
+# service-audit — Kubernetes Event stream -> NDJSON for UAVServiceAudit_CL.
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \

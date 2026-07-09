@@ -319,7 +319,7 @@ UAVMissionPlan_CL
 
 ## 6. UAVServiceAudit_CL
 
-**출처**: `service-audit` 사이드카 (`/var/run/docker.sock` 이벤트 스트림).
+**출처**: `service-audit` (Kubernetes core/v1 Event watch, 클러스터 전역). AKS는 containerd 전용이라 `/var/run/docker.sock`이 없음 — Docker 데몬 이벤트 대신 `get/list/watch on events` ClusterRole만으로 파드 생애주기를 관측.
 **볼륨**: 낮음~중간.
 **보존**: 30d / 90d.
 
@@ -328,31 +328,30 @@ UAVMissionPlan_CL
 | 컬럼 | 타입 | 설명 (실제 의미) |
 |---|---|---|
 | TimeGenerated | datetime | 이벤트 시각 |
-| EventType | string | 대상 종류 — `container`/`image`/`network`/`volume` |
-| Action | string | 무슨 일이 났나 — `start`/`die`(종료)/`kill`/`oom`(메모리 초과 강제종료)/`restart`/`pull`(이미지 받음)/`exec_create`(컨테이너 내 명령 실행) |
-| ActorId | string | 대상 컨테이너/이미지/네트워크 ID(64자 SHA) |
-| ContainerName | string | 컨테이너명 = 어떤 UAS 구성요소인지 (예: `uav-av-mpd`=비행체) |
-| ImageName | string | 사용 이미지명 |
-| ExitCode | string | 종료(die) 시 코드 — 0이 아니면 비정상 종료 |
-| Signal | string | kill 시 보낸 시그널 |
-| ServiceLabel | string | docker-compose 서비스명(구성요소 매핑) |
+| EventType | string | K8s `involvedObject.kind` — 대부분 `Pod` |
+| Action | string | K8s Event `reason` — `Pulled`/`Created`/`Started`/`Killing`(종료 지시)/`BackOff`/`Failed`/`FailedScheduling`/`Unhealthy`/`Preempted`/`Evicted`/`SuccessfulDelete`/`OOMKilling` |
+| ActorId | string | 대상 파드 UID |
+| ContainerName | string | 파드/컨테이너명 = 어떤 UAS 구성요소인지 (예: `telemetry-tap-xxxxx`) |
+| ImageName | string | (미구현) core/v1 Event엔 이미지명이 없어 공란 — 필요시 파드 spec 조회로 보강 가능 |
+| ExitCode | string | 이벤트 메시지에서 `exit code N` 패턴이 있을 때만 추출 — Docker 시절보다 커버리지 낮음(K8s Event는 종료코드를 항상 담지 않음) |
+| Signal | string | (미구현, core/v1 Event에 없음) |
+| ServiceLabel | string | 파드가 속한 네임스페이스(`soc`/`ground`/`link`/`air`/`c4i`) |
 | ProjectLabel | string | 프로젝트 = `uav-sim-env` |
-| Scope | string | 이벤트 범위(`local`) |
-| **IsDestructiveAction** | boolean | `Action in (destroy, delete, kill)`일 때 `true`. Docker 이벤트에서 파생 — 신규 producer 없이 **S66 데이터파괴류 행위를 기존 신호로 재해석** |
-| **LogBearingTargetSuspected** | boolean | 대상 컨테이너/볼륨명이 로그 생산 구성요소(telemetry-tap·datalink-satcom·counter-uas 등) 또는 log/ndjson 패턴에 해당하면 `true`. **S47 anti-forensics(로그삭제) 핵심** — 파괴 대상이 "증거(로그) 그 자체"인지 구분 |
+| Scope | string | 이벤트를 낸 컴포넌트(`kubelet`/`replicaset-controller` 등) |
+| **IsDestructiveAction** | boolean | `Action in (Killing, Preempted, Evicted, SuccessfulDelete, OOMKilling)`일 때 `true`. 기존 K8s Event에서 파생 — 신규 producer 없이 **S66 데이터파괴류 행위를 기존 신호로 재해석** |
+| **LogBearingTargetSuspected** | boolean | 대상 파드명이 로그 생산 구성요소(telemetry-tap·datalink-satcom·counter-uas 등) 또는 log/ndjson 패턴에 해당하면 `true`. **S47 anti-forensics(로그삭제) 핵심** — 파괴 대상이 "증거(로그) 그 자체"인지 구분 |
 
 ### 예시 값과 의미
-- `EventType="container", Action="start", ContainerName="uav-av-mpd"` → 비행체 컨테이너가 정상 기동.
-- `Action="die", ContainerName="uav-av-mpd", ExitCode="0"` → 비행체 컨테이너 정상 종료(코드 0). ExitCode가 0이 아니면 비정상 종료.
-- `Action="oom", ContainerName="uav-gcs-qgc"` → GCS 컨테이너가 메모리 초과로 강제 종료(자원 부족 신호).
-- `Action="pull", ImageName="..."` → 새 이미지를 받아옴(어떤 이미지인지 확인 대상).
-- `Action="kill", ContainerName="uav-telemetry-tap", IsDestructiveAction=true, LogBearingTargetSuspected=true` → **증거인멸 의심** — 텔레메트리 로그를 만들어내는 컨테이너 자체가 강제 종료됨(S47 anti-forensics/S66 데이터파괴 패턴). 임무 실패·재밍 등과 시간 인접하면 은폐 목적 가능성.
-- `Action="destroy", EventType="volume", LogBearingTargetSuspected=false` → 로그와 무관한 볼륨 정리(정상 운영 가능성 높음).
+- `EventType="Pod", Action="Started", ContainerName="av-muav-0"` → 비행체 파드가 정상 기동.
+- `Action="Pulled", ImageName=""` → 새 이미지를 받아옴(파드명으로 어떤 구성요소인지 확인).
+- `Action="OOMKilling", ContainerName="gcs-qgc-xxxxx"` → GCS 파드가 메모리 초과로 강제 종료(자원 부족 신호).
+- `Action="Killing", ContainerName="telemetry-tap-xxxxx", IsDestructiveAction=true, LogBearingTargetSuspected=true` → **증거인멸 의심** — 텔레메트리 로그를 만들어내는 파드 자체가 강제 종료됨(S47 anti-forensics/S66 데이터파괴 패턴). 임무 실패·재밍 등과 시간 인접하면 은폐 목적 가능성.
+- `Action="SuccessfulDelete", ContainerName="ti-stub-xxxxx", LogBearingTargetSuspected=false` → 로그와 무관한 파드 정리(정상 운영/스케일다운 가능성 높음).
 
 ### 시나리오 매핑
 
-- **비행 중 SITL 죽음** — `Action == "die" and ServiceLabel == "av-mpd"`
-- **비인가 이미지 풀** — `Action == "pull" and ImageName not in (...)`
+- **비행 중 SITL 죽음** — `Action == "Killing" and ContainerName startswith "av-muav"`
+- **비인가 이미지 풀** — `Action == "Pulled"` + 파드 spec 조인으로 이미지 해시 검증
 - **S47 anti-forensics / S66 데이터 파괴** — `IsDestructiveAction == true and LogBearingTargetSuspected == true`, 특히 다른 공격 시나리오(S1/S30 등) 탐지 직후 인접 시간대에 발생하면 우선순위 상향
 
 ### KQL 샘플 (S47/S66)
@@ -996,7 +995,7 @@ UAVSatcomLink_CL
   └── UAVOpAudit_CL       (운영자 인증)
 
 [인프라 층]
-  ├── UAVServiceAudit_CL  (Docker 이벤트)
+  ├── UAVServiceAudit_CL  (Kubernetes Event)
   ├── UAVDatalink_CL      (datalink 네트워크 카운터)
   ├── UAVResourceMetrics_CL (모든 컨테이너 리소스)
   └── UAVDatalinkConn_CL  (TCP 연결 스냅샷)

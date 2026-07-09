@@ -1,0 +1,53 @@
+{{- with .Values.serviceAudit }}
+{{- if .enabled }}
+# service-audit — Kubernetes Event stream(파드 생애주기) -> NDJSON -> UAVServiceAudit_CL.
+# AKS 는 containerd 전용(docker.sock 없음)이라 Docker daemon events 대신 클러스터
+# 전역 core/v1 Event 를 watch — get/list/watch on events 만 있으면 되는 최소 권한.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: service-audit
+  namespace: soc
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: { name: uav-service-audit }
+rules:
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: { name: uav-service-audit }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: uav-service-audit }
+subjects:
+  - { kind: ServiceAccount, name: service-audit, namespace: soc }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-audit
+  namespace: soc
+  labels: { app: service-audit }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: service-audit }
+  template:
+    metadata:
+      labels: { app: service-audit }
+    spec:
+      serviceAccountName: service-audit
+      nodeSelector: { pool: {{ .nodePool }} }
+      containers:
+        - name: service-audit
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ default $.Values.image.tag .imageTag }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            - { name: LOG_FILE_PATH, value: {{ default "/dev/stdout" .logPath | quote }} }
+          resources:
+            requests: { cpu: "50m", memory: 64Mi }
+            limits:   { cpu: "200m", memory: 128Mi }
+{{- end }}
+{{- end }}
