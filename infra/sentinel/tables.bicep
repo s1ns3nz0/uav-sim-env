@@ -174,6 +174,9 @@ resource uavPgse 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = 
         { name: 'StatusCode', type: 'int' }
         { name: 'FailReason', type: 'string' }
         { name: 'TokenExpiresAt', type: 'datetime' }
+        // T0800(Activate Firmware Update Mode) — 강제 진입 이벤트.
+        { name: 'Reason', type: 'string' }
+        { name: 'Authorized', type: 'boolean' }
       ]
     }
   }
@@ -372,6 +375,9 @@ resource uavC4i 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
         { name: 'ReportedBy', type: 'string' }
         { name: 'UnitCallsign', type: 'string' }
         { name: 'StatusCode', type: 'int' }
+        // T1567(Exfiltration Over Web Service) — /current-operation 읽기 감사.
+        { name: 'ClientIp', type: 'string' }
+        { name: 'ResponseBytes', type: 'long' }
       ]
     }
   }
@@ -496,6 +502,8 @@ resource uavFailsafe 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01
         { name: 'Text', type: 'string' }
         { name: 'ModeBefore', type: 'int' }
         { name: 'ModeAfter', type: 'int' }
+        // T0878(Alarm Suppression) — HEARTBEAT 주기 공백(경보 링크 억제 대리신호).
+        { name: 'GapSec', type: 'real' }
       ]
     }
   }

@@ -39,7 +39,9 @@ spec:
       nodeSelector: { pool: {{ default "system" $.Values.groundStubsNodePool }} }
       containers:
         - name: {{ .name }}
-          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          {{- $stubTag := "" }}
+          {{- if $.Values.groundStubsImageTags }}{{ $stubTag = index $.Values.groundStubsImageTags .name }}{{ end }}
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ default $.Values.image.tag $stubTag }}
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           env:
             {{- if $.Values.groundStubsLogToStdout }}

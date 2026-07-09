@@ -129,6 +129,8 @@ _mavsec_file_handle = None
 # Stateful trackers used to derive named mission events from the message stream.
 _last_mode: int | None = None
 _last_mission_seq: int | None = None
+_last_heartbeat_epoch: float | None = None
+HEARTBEAT_GAP_THRESHOLD_SEC = 5.0  # ArduPilot HEARTBEAT ~1Hz — 이보다 긴 공백은 이상
 _last_position: dict[str, float | None] = {"Lat": None, "Lon": None, "AltMSL_m": None}
 _param_state: dict[str, float] = {}
 _mavsec_signed = 0
@@ -244,7 +246,13 @@ def _maybe_derive_mission_events(record: dict[str, Any]) -> None:
         _emit_mission_event(named, record)
 
 
+def _emit_failsafe(payload: dict[str, Any]) -> None:
+    _failsafe_file_handle.write(json.dumps(payload, separators=(",", ":"), default=str) + "\n")
+    _failsafe_file_handle.flush()
+
+
 def _maybe_emit_failsafe(record: dict[str, Any]) -> None:
+    global _last_heartbeat_epoch
     if _failsafe_file_handle is None:
         return
     msg_type = record.get("MsgType")
@@ -272,10 +280,30 @@ def _maybe_emit_failsafe(record: dict[str, Any]) -> None:
                 "Severity": 4,
                 "StreamFailsafe": "failsafe",
             }
+
+        # T0878(Alarm Suppression) — 경보 자체를 "변조"하는 게 아니라 링크 상에서
+        # 가로채/드롭하는 억제는 그 억제 행위 자체를 직접 기록할 방법이 없다(수신 못한
+        # 메시지는 로그할 수 없음). 대신 ArduPilot HEARTBEAT(~1Hz) 주기의 비정상 공백을
+        # 대리 신호로 잡는다 — 활성 비행 중(SystemStatus=4) 공백은 링크 억제/차단 정황.
+        now_epoch = time.time()
+        system_status = record.get("SystemStatus")
+        if (
+            _last_heartbeat_epoch is not None
+            and system_status == 4
+            and now_epoch - _last_heartbeat_epoch > HEARTBEAT_GAP_THRESHOLD_SEC
+        ):
+            _emit_failsafe({
+                "TimeGenerated": record.get("TimeGenerated"),
+                "UAVId": record.get("UAVId"),
+                "EventType": "heartbeat_gap_suspected",
+                "GapSec": round(now_epoch - _last_heartbeat_epoch, 1),
+                "Severity": 3,
+                "StreamFailsafe": "failsafe",
+            })
+        _last_heartbeat_epoch = now_epoch
     if payload is None:
         return
-    _failsafe_file_handle.write(json.dumps(payload, separators=(",", ":"), default=str) + "\n")
-    _failsafe_file_handle.flush()
+    _emit_failsafe(payload)
 
 
 def _maybe_emit_config_audit(record: dict[str, Any]) -> None:

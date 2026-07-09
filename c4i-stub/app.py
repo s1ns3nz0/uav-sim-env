@@ -21,7 +21,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 
@@ -163,10 +163,26 @@ def post_friendly(pos: FriendlyPosition) -> dict[str, Any]:
 
 
 @app.get("/current-operation", tags=["meta"])
-def current_operation() -> dict[str, Any]:
-    return {
+def current_operation(request: Request) -> dict[str, Any]:
+    """Full operational-picture snapshot (orders, targets, friendly positions).
+
+    T1567(Exfiltration Over Web Service) — this is exactly the "legitimate
+    channel" the matrix flags: a read-only endpoint that returns the whole
+    operational picture in one response. Every other endpoint here logs on
+    write; this one previously logged nothing on read, so a large recon
+    pull looked identical to normal polling. Now audited by response size.
+    """
+    payload = {
         "orders_active": len(_orders),
         "targets_known": len(_targets),
         "friendly_positions_history": len(_friendly_positions),
         "latest_order": next(reversed(_orders.values()), None) if _orders else None,
     }
+    body_bytes = len(json.dumps(payload, default=str).encode("utf-8"))
+    _emit({
+        "EventType": "current_operation_read",
+        "ClientIp": request.client.host if request.client else "",
+        "ResponseBytes": body_bytes,
+        "StatusCode": 200,
+    })
+    return payload

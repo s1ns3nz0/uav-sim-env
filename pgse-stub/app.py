@@ -219,6 +219,32 @@ def get_approved_firmware(uav_id: str) -> dict[str, str]:
     return {"uav_id": uav_id, "expected_hash": expected}
 
 
+class FirmwareUpdateModeRequest(BaseModel):
+    uav_id: str
+    operator: str
+    reason: str = Field("", examples=["scheduled_ota", "field_recovery"])
+    authorized: bool = True
+
+
+@app.post("/armory/firmware/update-mode", tags=["armory"])
+def enter_firmware_update_mode(req: FirmwareUpdateModeRequest) -> dict[str, Any]:
+    """Force the FCC into firmware-update mode (flight control loop suspended).
+
+    T0800(Activate Firmware Update Mode) — 이 진입 이벤트 자체가 종전엔 전혀
+    모사·기록되지 않던 갭이었음. `authorized=false` 는 정비 절차 밖에서 강제
+    진입시킨 비인가 시나리오(공격자가 FCC 제어를 중단시키는 수단).
+    """
+    _emit_event({
+        "EventType": "firmware_update_mode_entered",
+        "UAVId": req.uav_id,
+        "Operator": req.operator,
+        "Reason": req.reason,
+        "Authorized": req.authorized,
+        "StatusCode": 200,
+    })
+    return {"uav_id": req.uav_id, "status": "update_mode_entered", "authorized": req.authorized}
+
+
 @app.post("/preflight/check", response_model=PreflightResult, tags=["preflight"])
 def preflight_check(req: PreflightRequest) -> PreflightResult:
     """Verify a UAV's firmware hash and SBOM against the approved registry.

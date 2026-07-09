@@ -103,6 +103,7 @@ var failsafeStreamColumns = [
   { name: 'Text', type: 'string' }
   { name: 'ModeBefore', type: 'int' }
   { name: 'ModeAfter', type: 'int' }
+  { name: 'GapSec', type: 'real' }
 ]
 
 var mavsecStreamColumns = [

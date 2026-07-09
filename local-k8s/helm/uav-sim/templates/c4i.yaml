@@ -27,7 +27,7 @@ spec:
       nodeSelector: { pool: {{ .nodePool }} }
       containers:
         - name: c4i-stub
-          image: {{ $.Values.image.registry }}/{{ .image }}:{{ $.Values.image.tag }}
+          image: {{ $.Values.image.registry }}/{{ .image }}:{{ default $.Values.image.tag .imageTag }}
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
           env:
             - { name: LOG_FILE_PATH, value: {{ default "/var/log/uav-sim-env/c4i.ndjson" .logPath }} }

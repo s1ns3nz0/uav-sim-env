@@ -13,16 +13,18 @@ telemetryTap:
   enabled: true
   nodePool: sitl                 # system 풀 maxPods=30 회피
   stdoutMode: true               # 7 NDJSON 전부 /dev/stdout → FB tail 가능
-  imageTag: v7                   # v7: GPS_INPUT 처리(GpsInputInjected/Hdop/Vdop/IgnoreFlags, S1/S61). UAVId = prefix + SysId suffix(편대)
+  imageTag: v8                   # v8: heartbeat_gap_suspected(T0878 경보억제 대리신호, GapSec)
   uavId: "MUAV-AKS"              # prefix 만 — 코드가 "-SYS001/002/003" 박음
 gcsQgc:       { enabled: true, imageTag: v2 }   # v2: nginx access log emitter (UAVGcsAccess_CL)
 fluentBit:    { enabled: true }   # AKS NDJSON → Sentinel 일원화
 ingress:      { enabled: true }   # https://sim.pollak.store (cert-manager + ingress-nginx)
 
 # H3b: system 풀 꽉 차서 ground stubs/c4i 21h Pending → sitl 로 재배치
-c4i: { nodePool: sitl, logPath: /dev/stdout }   # NDJSON 을 stdout 으로 → Fluent Bit tail 대상
+c4i: { nodePool: sitl, logPath: /dev/stdout, imageTag: v2 }   # v2: current_operation_read 감사(T1567 — ClientIp/ResponseBytes)
 groundStubsNodePool: sitl
 groundStubsLogToStdout: true                    # 모든 ground 스텁 LOG_FILE_PATH=/dev/stdout
+groundStubsImageTags:
+  pgse-stub: v2   # v2: firmware_update_mode_entered(T0800 — Reason/Authorized)
 
 # counter-uas 도 system 풀은 (a) maxPods 꽉 참 (b) fluentbit affinity 밖(sitl/satcom 만 커버)
 # → sitl 로 재배치해야 UAVCounterUas_CL 이 실제로 적재된다.

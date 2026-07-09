@@ -174,6 +174,8 @@ var pgseStreamColumns = [
   { name: 'StatusCode', type: 'int' }
   { name: 'FailReason', type: 'string' }
   { name: 'TokenExpiresAt', type: 'datetime' }
+  { name: 'Reason', type: 'string' }
+  { name: 'Authorized', type: 'boolean' }
 ]
 
 var operatorStreamColumns = [
@@ -283,6 +285,8 @@ var c4iStreamColumns = [
   { name: 'ReportedBy', type: 'string' }
   { name: 'UnitCallsign', type: 'string' }
   { name: 'StatusCode', type: 'int' }
+  { name: 'ClientIp', type: 'string' }
+  { name: 'ResponseBytes', type: 'long' }
 ]
 
 var cyberPostureStreamColumns = [

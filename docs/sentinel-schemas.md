@@ -243,17 +243,21 @@ UAVMissionEvent_CL
 | StatusCode | int | 처리 결과 HTTP 코드(200 정상 / 403·409 거부 / 404 없음) |
 | FailReason | string | 실패 사유 — `no_preflight_on_record`(검증 없이 발사 시도), `preflight_failed`(검증 실패) 등 |
 | TokenExpiresAt | datetime | 발사 인가 시 발급된 단기 토큰 만료 시각 |
+| **Reason** | string | `firmware_update_mode_entered` 전용 — 진입 사유(예: `scheduled_ota`, `field_recovery`) |
+| **Authorized** | boolean | `firmware_update_mode_entered` 전용 — 정비 절차 내 정상 진입이면 `true`. **T0800 핵심** — `false`면 정비 절차 밖에서 강제 진입시켜 FCC 제어루프를 중단시킨 비인가 시도 |
 
 ### 예시 값과 의미
 - `EventType="firmware_query", Found=true, ImageHashExpected="sha256:00..01"` → 무기고에 등록된 승인 펌웨어 해시 조회 성공.
 - `EventType="preflight_check", HashMatch=true, SbomForbiddenCount=0, Passed=true, StatusCode=200` → 탑재 펌웨어가 승인본과 일치하고 SBOM에 금지 컴포넌트 없음 → 출격 전 검증 통과.
 - `EventType="launch_authorize", Passed=true, TokenExpiresAt="2026-06-23T07:15:00Z"` → 검증 통과 후 만료시각이 찍힌 단기 발사 토큰 발급.
 - `HashMatch=false` 또는 `SbomForbiddenCount=2` → 탑재 펌웨어가 승인본과 다르거나 금지 컴포넌트 2개 포함(=`Passed=false`).
+- `EventType="firmware_update_mode_entered", Authorized=false, Reason=""` → **T0800** — 정비 절차 밖에서 FCC가 펌웨어 업데이트 모드로 강제 진입, 비행 제어 중단 유발 시도.
 
 ### 시나리오 매핑
 
 - **S4 펌웨어/공급망 변조** — `EventType == "preflight_check" and Passed == false`
 - **인사이드 위협** — `EventType == "launch_authorize"`인데 `FailReason == "no_preflight_on_record"`
+- **T0800 FW 업데이트 모드 강제 진입** — `EventType == "firmware_update_mode_entered" and Authorized == false`
 
 ### KQL 샘플
 
@@ -437,16 +441,20 @@ UAVDatalink_CL
 | ReportedBy | string | 표적 보고 주체 |
 | UnitCallsign | string | 우군 부대 콜사인(동조사격 버퍼용) |
 | StatusCode | int | 처리 코드 |
+| **ClientIp** | string | `current_operation_read` 전용 — 작전 스냅샷을 조회한 클라이언트 IP |
+| **ResponseBytes** | long | `current_operation_read` 전용 — 응답 페이로드 크기(byte). **T1567(Exfiltration Over Web Service) 핵심** — 정상 폴링(작음) 대비 반복적으로 크거나 비정상 IP에서의 조회는 합법 채널을 가장한 반출 정황 |
 
 ### 예시 값과 의미
 - `EventType="atcis_order_issued", OperationName="WHITE_TIGER", Roe="recon-only", TargetPriority="HIGH"` → 정찰 전용 ROE의 고우선 작전명령 하달.
 - `EventType="mims_target_update", Classification="HOSTILE", ConfidencePct=85, Source="uav-eoir"` → 무인기 영상으로 식별한 적성 표적, 신뢰도 85%.
 - `EventType="atcis_friendly_position", UnitCallsign="EAGLE-2", Lat=..., Lon=...` → 우군 부대 위치 갱신(무인기 좌표와 근접 비교용).
+- `EventType="current_operation_read", ClientIp="203.0.113.9", ResponseBytes=48210` → 작전 전체 스냅샷(명령·표적·우군위치)을 한 번에 읽어감. 정상 폴링 대비 비정상적으로 크거나 잦으면 T1567 정황.
 
 ### 시나리오 매핑
 
 - **METT+TC 상관분석** — `EventType == "atcis_order_issued"` + `UAVTelemetry_CL` 경로 조인
 - **fratricide 버퍼 위반** — `EventType == "atcis_friendly_position"` + `UAVTelemetry_CL` 위치 근접 join
+- **T1567 REST 반출** — `EventType == "current_operation_read"` 빈도·`ResponseBytes` 급증 상관
 
 ---
 
@@ -598,16 +606,18 @@ UAVCyberPosture_CL
 |---|---|---|
 | TimeGenerated | datetime | 발동 시각 |
 | UAVId | string | 해당 차량 |
-| EventType | string | `statustext_warning`(경고 메시지), `mode_failsafe_transition`(자동 비상모드 전환) |
+| EventType | string | `statustext_warning`(경고 메시지), `mode_failsafe_transition`(자동 비상모드 전환), `heartbeat_gap_suspected`(HEARTBEAT 주기 이상 공백) |
 | Severity | int | MAVLink 심각도 (0=EMERG, 1=ALERT, 2=CRIT, 3=ERR, 4=WARN) |
 | Text | string | FCC 경고 본문(예: 링크 상실·배터리 부족) |
 | ModeBefore | int | 비상 전환 직전 비행모드 |
 | ModeAfter | int | 전환 후 모드 (11=RTL 복귀, 25=QRTL, 21=QLand) |
+| **GapSec** | real | `heartbeat_gap_suspected` 전용 — 직전 HEARTBEAT 이후 경과 초(5초 초과 시 발동). **T0878(Alarm Suppression) 대리 신호** — 경보 메시지를 링크 상에서 가로채/드롭하는 억제는 그 행위 자체를 직접 기록할 방법이 없어(수신 못한 메시지는 로그 불가), 활성 비행 중(SystemStatus=4) HEARTBEAT 주기(~1Hz) 공백으로 대신 포착 |
 
 ### 예시 값과 의미
 - `EventType="mode_failsafe_transition", ModeBefore=10, ModeAfter=11` → AUTO(10)에서 RTL(11)로 자동 전환 = 링크 상실/저전압 등으로 기체가 스스로 복귀 시작.
 - `EventType="statustext_warning", Severity=2, Text="Battery critical"` → CRIT(2)급 배터리 위급 경고.
 - `Severity=4, Text="GPS glitch"` → WARN(4)급 GPS 일시 이상 경고(즉시 비상행동은 아님).
+- `EventType="heartbeat_gap_suspected", GapSec=12.4` → 활성 비행 중인데 12.4초간 HEARTBEAT가 끊김 — 링크상 경보/보고 메시지가 억제·차단됐을 가능성(T0878).
 
 ### KQL 샘플
 
@@ -617,6 +627,14 @@ UAVFailsafe_CL
 | where TimeGenerated > ago(15m)
 | where EventType == "mode_failsafe_transition"
 | project TimeGenerated, UAVId, ModeBefore, ModeAfter
+```
+
+```kql
+// T0878 — HEARTBEAT 공백(경보 억제 의심) 반복 여부
+UAVFailsafe_CL
+| where TimeGenerated > ago(15m)
+| where EventType == "heartbeat_gap_suspected"
+| project TimeGenerated, UAVId, GapSec
 ```
 
 ---
