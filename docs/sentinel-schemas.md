@@ -859,11 +859,13 @@ UAVWeapon_CL
 | **Encoding** | string | `none`(평문)/`base64_tunnel`/`xor_obfuscated`/`dns_like_encode` — **S65 핵심**. 링크 무결성·재밍은 정상인데 인코딩만 바뀌는 것이 은닉 C2 특징 |
 | **PayloadEntropy** | real | 페이로드 Shannon 엔트로피(0~8) 근사. 평문 MAVLink~3.5\~5, **은닉 C2 페이로드는 7.5+**(암호화/인코딩 특유의 고엔트로피) |
 | **BeaconJitterSec** | real | 전송 간격의 불규칙성(초). 정상 트래픽은 지터 큼(0.5\~4s), **은닉 C2 비콘은 저지터(≤0.15s, 규칙적)** — TI에서 흔한 C2 비콘 탐지 지표를 링크 계층에 이식 |
+| **PayloadBytes** | long | 링크 상태 틱당 페이로드 바이트량. 정상 하트비트 2\~8KB, **`exfil` 모드는 200KB\~2MB급 급증**. **T1011(Exfiltration Over Other Network Medium) 핵심** — 종전엔 SATCOM 링크에 용량 컬럼이 아예 없어 이 기법이 미포착이었음 |
 
 **예시 값과 의미**
 - `SessionId="S-1001", Seq=4521, IntegrityStatus="ok", RttMs=595, JamIndicator=0.02, Mode="normal", Encoding="none", PayloadEntropy=4.2` → 세션 정상 진행, RTT 595ms(GEO 위성의 정상 왕복 지연 범위), 무결성 ok, 재밍 정황 거의 없음, 평문 트래픽.
 - `IntegrityStatus="signature_mismatch"` 또는 `Seq`가 비연속 점프 → 위성 링크 무결성 이상.
 - `Mode="covert", IntegrityStatus="ok", JamIndicator=0.02, Encoding="dns_like_encode", PayloadEntropy=7.83, BeaconJitterSec=0.06` → **무결성·재밍 지표는 전부 정상인데 엔트로피 급등 + 규칙적 저지터 비콘** = 링크 자체는 멀쩡해 보이지만 은닉 C2가 흐르고 있다는 신호(킬체인 C9급 "완전 은밀" 패턴을 링크 계층에서 재현).
+- `Mode="exfil", PayloadBytes=1450000, IntegrityStatus="ok"` → 링크 무결성은 정상인데 페이로드가 정상 하트비트 대비 200배 이상 급증 = SATCOM을 통한 대량 유출(T1011) 정황.
 
 **KQL 샘플 (S65 은닉 C2 후보)**
 ```kql

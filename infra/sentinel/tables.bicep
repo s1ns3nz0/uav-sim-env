@@ -668,6 +668,8 @@ resource uavSatcomLink 'Microsoft.OperationalInsights/workspaces/tables@2023-09-
         { name: 'Encoding', type: 'string' }
         { name: 'PayloadEntropy', type: 'real' }
         { name: 'BeaconJitterSec', type: 'real' }
+        // T1011(Exfiltration Over Other Network Medium) — SATCOM 링크 용량 컬럼.
+        { name: 'PayloadBytes', type: 'long' }
       ]
     }
   }

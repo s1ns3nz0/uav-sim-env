@@ -28,10 +28,10 @@ groundStubsLogToStdout: true                    # 모든 ground 스텁 LOG_FILE_
 # → sitl 로 재배치해야 UAVCounterUas_CL 이 실제로 적재된다.
 counterUas: { nodePool: sitl }
 # service-audit 도 동일한 이유로 sitl 로 배치(신규 컴포넌트라 처음부터 올바른 풀 사용).
-serviceAudit: { nodePool: sitl, imageTag: v2 }  # v2: watch timeout_seconds=0 버그 수정(이벤트 미수신)
+serviceAudit: { nodePool: sitl, imageTag: v3 }  # v3: stdout 중복 기록 버그 수정(모든 이벤트 2배 집계되던 문제)
 
 # AKS 출처를 표에서 구별하기 위해 UAV_ID 를 다르게 (검증용)
 datalinkSatcom:
-  imageTag: v2  # v2: covert 모드(S65 C2 은닉 — Encoding/PayloadEntropy/BeaconJitterSec)
+  imageTag: v3  # v3: exfil 모드 추가(T1011 — PayloadBytes 급증으로 SATCOM 대량유출 포착)
   env:
     UAV_ID: "MUAV-AKS-001"

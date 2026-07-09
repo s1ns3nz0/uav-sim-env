@@ -18,6 +18,7 @@ we model the link characteristics and expose a control surface to drive the S3
     covert    -> Encoding=tunnel/obfuscated, PayloadEntropy 급등, 규칙적 BeaconIntervalSec
                  (S65 C2 은닉 — 터널링/암호화/난독화/인코딩. UAVOperator_CL의 평문 명령
                  트래픽과 달리, 은닉 C2는 링크 계층 자체의 엔트로피·비콘 규칙성으로만 드러남)
+    exfil     -> PayloadBytes 급증(T1011 — SATCOM 별도 매체로 정찰영상/SAR 대량 유출)
 
 A background thread emits one link-status record every EMIT_INTERVAL_SEC.
 """
@@ -93,6 +94,9 @@ def _build_record() -> dict[str, Any]:
         encoding = "none"
         payload_entropy = round(random.uniform(3.5, 5.0), 2)
         beacon_jitter_sec = round(random.uniform(0.5, 4.0), 2)
+        # T1011(Exfiltration Over Other Network Medium) — 링크 상태 틱당 페이로드
+        # 바이트량. 종전엔 SATCOM 링크에 용량 컬럼이 아예 없어 이 기법이 미포착이었음.
+        payload_bytes = random.randint(2_000, 8_000)
 
         if mode == "integrity":
             integrity = "signature_mismatch"
@@ -109,6 +113,10 @@ def _build_record() -> dict[str, Any]:
             encoding = random.choice(["base64_tunnel", "xor_obfuscated", "dns_like_encode"])
             payload_entropy = round(random.uniform(7.5, 7.99), 2)
             beacon_jitter_sec = round(random.uniform(0.0, 0.15), 2)
+        elif mode == "exfil":
+            # T1011 — 정찰영상/SAR 표적을 SATCOM 별도 매체로 대량 유출. 정상 하트비트
+            # (2~8KB) 대비 페이로드가 두 자릿수 배 급증하는 것으로 모사.
+            payload_bytes = random.randint(200_000, 2_000_000)
 
         return {
             "UAVId": UAV_ID,
@@ -124,6 +132,7 @@ def _build_record() -> dict[str, Any]:
             "Encoding": encoding,
             "PayloadEntropy": payload_entropy,
             "BeaconJitterSec": beacon_jitter_sec,
+            "PayloadBytes": payload_bytes,
         }
 
 
@@ -143,7 +152,7 @@ def _startup() -> None:
 
 
 class InjectRequest(BaseModel):
-    type: Literal["integrity", "replay", "hijack", "jam", "covert"]
+    type: Literal["integrity", "replay", "hijack", "jam", "covert", "exfil"]
     duration_sec: int = Field(30, ge=1, le=3600)
 
 

@@ -130,10 +130,15 @@ def _watch_loop(v1: client.CoreV1Api, handle) -> None:
 
 def main() -> int:
     handle = None
-    if LOG_FILE_PATH:
+    # /dev/stdout(또는 stdout 자체 파일디스크립터, "-")로 지정하면 sys.stdout.write와
+    # 별개로 두 번째 핸들을 또 열어 같은 줄을 두 번 쓰게 된다 — stdout 전용 배포
+    # (helm 기본값)에서 모든 이벤트가 중복 집계되는 버그였다.
+    if LOG_FILE_PATH and LOG_FILE_PATH not in ("/dev/stdout", "/dev/fd/1", "-"):
         os.makedirs(os.path.dirname(LOG_FILE_PATH) or ".", exist_ok=True)
         handle = open(LOG_FILE_PATH, "a", encoding="utf-8")
         _log(f"file sink active: {LOG_FILE_PATH}")
+    elif LOG_FILE_PATH:
+        _log("stdout sink (LOG_FILE_PATH points at stdout, not opening a second handle)")
 
     _log("loading in-cluster kube config")
     config.load_incluster_config()

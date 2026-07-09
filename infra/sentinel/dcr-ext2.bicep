@@ -70,6 +70,7 @@ var satcomStreamColumns = [
   { name: 'Encoding', type: 'string' }
   { name: 'PayloadEntropy', type: 'real' }
   { name: 'BeaconJitterSec', type: 'real' }
+  { name: 'PayloadBytes', type: 'long' }
 ]
 
 var sarStreamColumns = [
